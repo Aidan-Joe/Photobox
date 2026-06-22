@@ -1,27 +1,411 @@
-function App() {
-  return (
-    <div style={{
-      height: "100vh",
-      background: "#000",
-      color: "#fff",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center"
-    }}>
-      <h1 style={{ fontSize: "48px" }}>📸 Photobox</h1>
+import { useState, useEffect, useRef, useCallback } from 'react';
+import './App.css';
+import { useCamera } from './hooks/useCamera.js';
+import { useFetch } from './hooks/useFetch.js';
+import { useLocalStorage } from './hooks/useLocalStorage.js';
+import { usePhotoboxWorkflow } from './hooks/usePhotoboxWorkflow.js';
+import { CONFIG, ENDPOINTS } from './config.js';
+import { mockPrintOptions, mockFrames } from './mockData.js';
 
-      <button style={{
-        marginTop: "30px",
-        padding: "20px 40px",
-        fontSize: "24px",
-        cursor: "pointer",
-        borderRadius: "10px"
-      }}>
-        Mulai Foto
-      </button>
-    </div>
+// Page Components
+import Welcome from './pages/Welcome.jsx';
+import Booking from './pages/Booking.jsx';
+import PrintOption from './pages/PrintOption.jsx';
+import Payment from './pages/Payment.jsx';
+import WaitPayment from './pages/WaitPayment.jsx';
+import FrameSelection from './pages/FrameSelection.jsx';
+import Camera from './pages/Camera.jsx';
+import Preview from './pages/Preview.jsx';
+import Email from './pages/Email.jsx';
+import Done from './pages/Done.jsx';
+
+function App() {
+  // Hooks
+  const camera = useCamera();
+  const workflow = usePhotoboxWorkflow();
+  const [bookingCode, setBookingCode] = useLocalStorage('bookingCode', '');
+  const [userEmail, setUserEmail] = useLocalStorage('userEmail', '');
+  const [capturedPhotos, setCapturedPhotos] = useState([]);
+  const [selectedPhotos, setSelectedPhotos] = useState([]); // Selected dari preview
+  const paymentPollRef = useRef(null);
+  const isCapturingRef = useRef(false);
+
+  // Get data
+  const { data: printOptions } = useFetch(
+    workflow.bookingId ? `${CONFIG.API_URL}${ENDPOINTS.PRINT_OPTIONS}?booking_code=${bookingCode}` : null
   );
+  const { data: frames } = useFetch(
+    workflow.bookingId ? `${CONFIG.API_URL}${ENDPOINTS.FRAMES}` : null
+  );
+
+  // Page states
+  const [currentPage, setCurrentPage] = useState('welcome'); 
+  // welcome → booking → printOption → payment → waitPayment → frame → camera → preview → email → uploading → done
+
+  // UI States
+  const [selectedPrintOption, setSelectedPrintOption] = useState(null);
+  const [paymentQrCode, setPaymentQrCode] = useState('');
+  const [selectedFrame, setSelectedFrame] = useState(null);
+  const [countdown, setCountdown] = useState(0);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const [paymentStatus, setPaymentStatus] = useState(null);
+  const [previewTimer, setPreviewTimer] = useState(420); // 7 menit = 420 detik
+  const [error, setError] = useState(null);
+  const [isFlashing, setIsFlashing] = useState(false);
+  const [activePreviewPhoto, setActivePreviewPhoto] = useState(null);
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+
+  // ============ BOOKING PAGE ============
+  const handleVerifyBooking = async (e) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await workflow.verifyBooking(bookingCode);
+      setCurrentPage('printOption');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // ============ PRINT OPTION PAGE ============
+  const handleSelectPrintOption = async (optionId) => {
+    setSelectedPrintOption(optionId);
+    setError(null);
+    try {
+      const result = await workflow.generatePaymentQR(optionId);
+      setCurrentPage('payment');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // ============ PAYMENT PAGE ============
+  const handleWaitForPayment = () => {
+    setCurrentPage('waitPayment');
+    setPaymentStatus('waiting');
+    
+    // Poll payment status setiap 2 detik
+    paymentPollRef.current = setInterval(async () => {
+      try {
+        const status = await workflow.checkPaymentStatus(workflow.paymentId);
+        setPaymentStatus(status);
+
+        if (status === 'settlement' || status === 'paid') {
+          clearInterval(paymentPollRef.current);
+          setCurrentPage('frame');
+        }
+      } catch (err) {
+        console.error('Payment check error:', err);
+      }
+    }, 2000);
+  };
+
+  // ============ FRAME SELECTION PAGE ============
+  const handleSelectFrame = (frameId) => {
+    setSelectedFrame(frameId);
+  };
+
+  const handleProceedFromFrame = async () => {
+    if (!selectedFrame) return;
+    try {
+      await workflow.startSession(selectedFrame, 1); // filter_id = 1 default
+      setCurrentPage('camera');
+      setPhotoIndex(0);
+      setCapturedPhotos([]);
+      
+      // Start camera
+      await camera.startCamera('user');
+      
+      setCountdown(0);
+      setIsCountingDown(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleTriggerCountdown = () => {
+    if (photoIndex >= 10 || isTimerPaused || isCapturingRef.current || isCountingDown) return;
+    setIsCountingDown(true);
+    setCountdown(3);
+  };
+
+  const capturePhoto = useCallback(async () => {
+    if (photoIndex >= 10 || isTimerPaused || isCapturingRef.current) return;
+
+    isCapturingRef.current = true;
+
+    // Trigger flash effect
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 150);
+
+    try {
+      const photo = await camera.takePhoto();
+      if (photo) {
+        setCapturedPhotos(prev => [...prev, photo]);
+        setActivePreviewPhoto(photo);
+        setIsTimerPaused(true);
+
+        const nextIndex = photoIndex + 1;
+        setPhotoIndex(nextIndex);
+
+        setTimeout(() => {
+          setActivePreviewPhoto(null);
+          setIsTimerPaused(false);
+          isCapturingRef.current = false;
+
+          if (nextIndex >= 10) {
+            camera.stopCamera();
+            setCurrentPage('preview');
+            setPreviewTimer(420); // Reset 7 menit timer
+          } else {
+            setCountdown(0);
+            setIsCountingDown(false);
+          }
+        }, 1500);
+      } else {
+        isCapturingRef.current = false;
+      }
+    } catch (err) {
+      console.error('Capture error:', err);
+      isCapturingRef.current = false;
+    }
+  }, [camera, photoIndex, isTimerPaused]);
+
+  // ============ CAMERA PAGE - Countdown & Auto Capture ============
+  useEffect(() => {
+    if (currentPage !== 'camera' || photoIndex >= 10 || isTimerPaused || !isCountingDown) return;
+
+    if (countdown === 0) {
+      setIsCountingDown(false);
+      capturePhoto();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [currentPage, countdown, photoIndex, isTimerPaused, isCountingDown, capturePhoto]);
+
+  // ============ PREVIEW PAGE - 7 Menit Timer ============
+  useEffect(() => {
+    if (currentPage !== 'preview' || previewTimer <= 0) return;
+
+    const timer = setInterval(() => {
+      setPreviewTimer(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [currentPage, previewTimer]);
+
+  // Auto move to email page jika timeout
+  useEffect(() => {
+    if (previewTimer === 0 && currentPage === 'preview') {
+      handleProceedToEmail();
+    }
+  }, [previewTimer, currentPage]);
+
+  const handleSelectPhotoForPreview = (photoIndex) => {
+    setSelectedPhotos(prev => {
+      if (prev.includes(photoIndex)) {
+        return prev.filter(i => i !== photoIndex);
+      }
+      if (prev.length >= 6) {
+        return [...prev.slice(1), photoIndex];
+      }
+      return [...prev, photoIndex];
+    });
+  };
+
+  const handleProceedToEmail = () => {
+    if (selectedPhotos.length === 0) {
+      setError('Pilih minimal 1 foto!');
+      return;
+    }
+    setCurrentPage('email');
+  };
+
+  // ============ EMAIL PAGE ============
+  const handleInputEmail = (e) => {
+    setUserEmail(e.target.value);
+  };
+
+  // ============ UPLOAD PAGE ============
+  const handleUploadPhotos = async () => {
+    if (!userEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      setError('Email tidak valid!');
+      return;
+    }
+
+    setError(null);
+    try {
+      // Filter only selected photos
+      const filesToUpload = selectedPhotos.map(idx => capturedPhotos[idx]);
+      
+      await workflow.uploadPhotos(filesToUpload);
+      await workflow.sendSessionEmail(userEmail);
+      await workflow.completeSession();
+      
+      setCurrentPage('done');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // ============ HELPER FUNCTIONS ============
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // ============ RENDER PAGES ============
+  switch (currentPage) {
+    case 'welcome':
+      return <Welcome onStart={() => setCurrentPage('booking')} />;
+
+    case 'booking':
+      return (
+        <Booking
+          bookingCode={bookingCode}
+          setBookingCode={setBookingCode}
+          onSubmit={handleVerifyBooking}
+          loading={workflow.loading}
+          error={error}
+        />
+      );
+
+    case 'printOption':
+      return (
+        <PrintOption
+          printOptions={mockPrintOptions}
+          selectedPrintOption={selectedPrintOption}
+          onSelect={setSelectedPrintOption}
+          onProceed={async () => {
+            if (!selectedPrintOption) return;
+            setError(null);
+            try {
+              const result = await workflow.generatePaymentQR(selectedPrintOption);
+              setPaymentQrCode(result.qrCode);
+              setCurrentPage('payment');
+            } catch (err) {
+              setError(err.message);
+            }
+          }}
+          onBack={() => {
+            setCurrentPage('booking');
+          }}
+          error={error}
+        />
+      );
+
+    case 'payment':
+      const selectedPkg = mockPrintOptions.find(opt => opt.id === selectedPrintOption);
+      return (
+        <Payment
+          bookingId={workflow.bookingId}
+          paymentId={workflow.paymentId}
+          qrCode={paymentQrCode}
+          selectedPackage={selectedPkg}
+          onPaymentSuccess={() => {
+            setCurrentPage('frame');
+          }}
+          onCancel={() => {
+            setPaymentQrCode('');
+            setCurrentPage('printOption');
+          }}
+          onRefresh={async () => {
+            if (!selectedPrintOption) return;
+            try {
+              const result = await workflow.generatePaymentQR(selectedPrintOption);
+              setPaymentQrCode(result.qrCode);
+            } catch (err) {
+              console.error('Refresh QR failed:', err);
+            }
+          }}
+          checkPaymentStatus={workflow.checkPaymentStatus}
+          mockMode={workflow.mockMode}
+          error={error}
+        />
+      );
+
+    case 'waitPayment':
+      return <WaitPayment paymentStatus={paymentStatus} />;
+
+    case 'frame':
+      return (
+        <FrameSelection
+          frames={mockFrames}
+          selectedFrame={selectedFrame}
+          onSelect={handleSelectFrame}
+          onProceed={handleProceedFromFrame}
+        />
+      );
+
+    case 'camera':
+      return (
+        <Camera
+          videoRef={camera.videoRef}
+          photoIndex={photoIndex}
+          countdown={countdown}
+          selectedFrame={selectedFrame}
+          capturedPhotos={capturedPhotos}
+          error={error || camera.error}
+          onCapture={handleTriggerCountdown}
+          isFlashing={isFlashing}
+          activePreviewPhoto={activePreviewPhoto}
+          isCountingDown={isCountingDown}
+          isTimerPaused={isTimerPaused}
+        />
+      );
+
+    case 'preview':
+      return (
+        <Preview
+          previewTimer={previewTimer}
+          formatTime={formatTime}
+          selectedPhotos={selectedPhotos}
+          capturedPhotos={capturedPhotos}
+          onSelectPhoto={handleSelectPhotoForPreview}
+          onProceed={handleProceedToEmail}
+          selectedFrame={selectedFrame}
+          error={error}
+        />
+      );
+
+    case 'email':
+      return (
+        <Email
+          userEmail={userEmail}
+          onInputEmail={handleInputEmail}
+          setUserEmail={setUserEmail}
+          onSubmit={handleUploadPhotos}
+          loading={workflow.loading}
+          error={error}
+        />
+      );
+
+    case 'done':
+      return (
+        <Done
+          userEmail={userEmail}
+          onReset={() => {
+            setBookingCode('');
+            setUserEmail('');
+            setCapturedPhotos([]);
+            setSelectedPhotos([]);
+            setPhotoIndex(0);
+            setCurrentPage('welcome');
+            workflow.reset();
+          }}
+        />
+      );
+
+    default:
+      return <div className="kiosk-container"><div className="kiosk-card"><h2>Halaman tidak ditemukan</h2></div></div>;
+  }
 }
 
 export default App;
