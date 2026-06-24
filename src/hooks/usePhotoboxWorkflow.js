@@ -1,15 +1,10 @@
 import { useState } from 'react';
-import { mockApiResponses, testBookingCodes } from '../mockData.js';
+import {
+  bookingAPI,
+  paymentAPI,
+  sessionAPI,
+} from '../services/api.js';
 
-// DEVELOPMENT MODE - Set ke true untuk testing tanpa backend
-const USE_MOCK_MODE = true;
-
-/**
- * Custom hook untuk mengelola Photobox workflow
- * Handles: booking verification → payment → session → photo upload → completion
- * 
- * Mock Mode: Set USE_MOCK_MODE = true untuk testing tanpa backend CI4
- */
 export function usePhotoboxWorkflow() {
   const [state, setState] = useState({
     step: 'idle',
@@ -18,62 +13,97 @@ export function usePhotoboxWorkflow() {
     sessionId: null,
     printOptions: [],
     frames: [],
+    filters: [],
     error: null,
     loading: false,
-    mockMode: USE_MOCK_MODE,
+    mockMode: false,
   });
 
-  // Helper: Delay untuk simulate network
-  const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
-  // Step 1: Verify booking
+  // STEP 1 - VERIFY BOOKING
   const verifyBooking = async (bookingCodeOrQR) => {
-    setState(prev => ({ ...prev, step: 'verifying', loading: true, error: null }));
-    try {
-      console.log('🧪 [MOCK] Verifying booking:', bookingCodeOrQR);
-      await delay(800);
+    setState(prev => ({
+      ...prev,
+      step: 'verifying',
+      loading: true,
+      error: null,
+    }));
 
-      if (!testBookingCodes.includes(bookingCodeOrQR)) {
-        throw new Error('❌ Kode booking tidak valid! Gunakan: 842000, 123456, atau 654321');
+    try {
+      console.log('🔍 Verifying booking:', bookingCodeOrQR);
+
+      const bookingResult = await bookingAPI.verifyBooking({
+        booking_code: bookingCodeOrQR,
+      });
+
+      const bookingId = bookingResult.booking?.id;
+
+      if (!bookingId) {
+        throw new Error('Booking tidak ditemukan');
       }
 
-      const result = mockApiResponses.verifyBooking(bookingCodeOrQR);
-      const bookingId = result.data?.booking_id;
+      const printOptionsResult =
+        await bookingAPI.getPrintOptions(bookingCodeOrQR);
 
-      const printOpts = mockApiResponses.getPrintOptions();
-      const framesData = mockApiResponses.getFrames();
+      const framesResult =
+        await bookingAPI.getFrames();
+
+      const printOptions =
+        printOptionsResult.print_options || [];
+
+      const frames =
+        framesResult.frames || [];
+
+      const filters =
+        framesResult.filters || [];
 
       setState(prev => ({
         ...prev,
         step: 'verified',
         bookingId,
-        printOptions: printOpts.data || [],
-        frames: framesData.data || [],
+        printOptions,
+        frames,
+        filters,
         loading: false,
       }));
 
-      console.log('✅ [MOCK] Booking verified:', bookingId);
-      return { bookingId, printOptions: printOpts.data, frames: framesData.data };
+      return {
+        bookingId,
+        printOptions,
+        frames,
+        filters,
+      };
     } catch (error) {
+      console.error(error);
+
       setState(prev => ({
         ...prev,
         step: 'error',
         error: error.message,
         loading: false,
       }));
+
       throw error;
     }
   };
 
-  // Step 2: Generate payment QR
+  // STEP 2 - GENERATE PAYMENT QR
   const generatePaymentQR = async (printOptionId) => {
-    setState(prev => ({ ...prev, step: 'paying', loading: true, error: null }));
-    try {
-      console.log('🧪 [MOCK] Generating payment QR for option:', printOptionId);
-      await delay(600);
+    setState(prev => ({
+      ...prev,
+      step: 'paying',
+      loading: true,
+      error: null,
+    }));
 
-      const result = mockApiResponses.generatePaymentQR(state.bookingId, printOptionId);
-      const paymentId = result.data?.payment_id;
+    try {
+      const result = await paymentAPI.generateQR({
+        booking_id: state.bookingId,
+        print_option_id: printOptionId,
+      });
+
+      const paymentId =
+        result.payment?.id ||
+        result.payment_id;
 
       setState(prev => ({
         ...prev,
@@ -81,8 +111,11 @@ export function usePhotoboxWorkflow() {
         loading: false,
       }));
 
-      console.log('✅ [MOCK] Payment QR generated:', paymentId);
-      return { paymentId, qrCode: result.data?.qr_code };
+      return {
+        paymentId,
+        payment: result.payment,
+        midtrans: result.midtrans,
+      };
     } catch (error) {
       setState(prev => ({
         ...prev,
@@ -90,36 +123,50 @@ export function usePhotoboxWorkflow() {
         error: error.message,
         loading: false,
       }));
+
       throw error;
     }
   };
 
-  // Step 3: Check payment status
+  // STEP 3 - CHECK PAYMENT STATUS
   const checkPaymentStatus = async (paymentId) => {
     try {
-      console.log('🧪 [MOCK] Checking payment status:', paymentId);
-      
-      // Simulate payment processing - auto success
-      const statuses = ['pending', 'waiting', 'settlement'];
-      const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-      
-      console.log('✅ [MOCK] Payment status:', randomStatus);
-      return randomStatus;
+      const result =
+        await paymentAPI.getPaymentStatus(paymentId);
+
+      return (
+        result.payment?.status ||
+        'pending'
+      );
     } catch (error) {
-      console.error('❌ Payment status check failed:', error);
+      console.error(error);
       throw error;
     }
   };
 
-  // Step 4: Start session
+  // STEP 4 - START SESSION
   const startSession = async (frameId, filterId) => {
-    setState(prev => ({ ...prev, step: 'processing', loading: true, error: null }));
-    try {
-      console.log('🧪 [MOCK] Starting session with frame:', frameId);
-      await delay(800);
+    setState(prev => ({
+      ...prev,
+      step: 'processing',
+      loading: true,
+      error: null,
+    }));
 
-      const result = mockApiResponses.startSession(state.bookingId, frameId, filterId);
-      const sessionId = result.data?.session_id;
+    try {
+      const result =
+        await sessionAPI.startSession({
+          booking_id: state.bookingId,
+          frame_id: frameId,
+          filter_id: filterId,
+        });
+
+      const sessionId =
+        result.session?.id;
+
+      if (!sessionId) {
+        throw new Error('Session gagal dibuat');
+      }
 
       setState(prev => ({
         ...prev,
@@ -127,8 +174,10 @@ export function usePhotoboxWorkflow() {
         loading: false,
       }));
 
-      console.log('✅ [MOCK] Session started:', sessionId);
-      return { sessionId };
+      return {
+        sessionId,
+        session: result.session,
+      };
     } catch (error) {
       setState(prev => ({
         ...prev,
@@ -136,22 +185,32 @@ export function usePhotoboxWorkflow() {
         error: error.message,
         loading: false,
       }));
+
       throw error;
     }
   };
 
-  // Step 5: Upload photos
+  // STEP 5 - UPLOAD PHOTOS
   const uploadPhotos = async (files) => {
-    setState(prev => ({ ...prev, step: 'uploading', loading: true, error: null }));
+    setState(prev => ({
+      ...prev,
+      step: 'uploading',
+      loading: true,
+      error: null,
+    }));
+
     try {
-      console.log('🧪 [MOCK] Uploading photos:', files.length);
-      await delay(1000);
+      const result =
+        await sessionAPI.uploadPhotos(
+          state.sessionId,
+          files
+        );
 
-      const result = mockApiResponses.uploadPhotos(state.sessionId, files.length);
+      setState(prev => ({
+        ...prev,
+        loading: false,
+      }));
 
-      setState(prev => ({ ...prev, loading: false }));
-
-      console.log('✅ [MOCK] Photos uploaded:', files.length);
       return result;
     } catch (error) {
       setState(prev => ({
@@ -160,34 +219,32 @@ export function usePhotoboxWorkflow() {
         error: error.message,
         loading: false,
       }));
+
       throw error;
     }
   };
 
-  // Step 6: Send email
+  // STEP 6 - SAVE EMAIL
   const sendSessionEmail = async (email) => {
-    try {
-      console.log('🧪 [MOCK] Sending email to:', email);
-      await delay(600);
-
-      const result = mockApiResponses.sendEmail(state.sessionId, email);
-
-      console.log('✅ [MOCK] Email sent to:', email);
-      return result;
-    } catch (error) {
-      console.error('❌ Email send failed:', error);
-      throw error;
-    }
+    return await sessionAPI.sendEmail(
+      state.sessionId,
+      email
+    );
   };
 
-  // Step 7: Complete session
+  // STEP 7 - COMPLETE SESSION
   const completeSession = async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      console.log('🧪 [MOCK] Completing session');
-      await delay(500);
+    setState(prev => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
 
-      const result = mockApiResponses.completeSession(state.sessionId);
+    try {
+      const result =
+        await sessionAPI.completeSession(
+          state.sessionId
+        );
 
       setState(prev => ({
         ...prev,
@@ -195,7 +252,6 @@ export function usePhotoboxWorkflow() {
         loading: false,
       }));
 
-      console.log('✅ [MOCK] Session completed');
       return result;
     } catch (error) {
       setState(prev => ({
@@ -204,11 +260,11 @@ export function usePhotoboxWorkflow() {
         error: error.message,
         loading: false,
       }));
+
       throw error;
     }
   };
 
-  // Reset workflow
   const reset = () => {
     setState({
       step: 'idle',
@@ -217,17 +273,16 @@ export function usePhotoboxWorkflow() {
       sessionId: null,
       printOptions: [],
       frames: [],
+      filters: [],
       error: null,
       loading: false,
-      mockMode: USE_MOCK_MODE,
+      mockMode: false,
     });
   };
 
   return {
-    // State
     ...state,
 
-    // Actions
     verifyBooking,
     generatePaymentQR,
     checkPaymentStatus,
@@ -236,9 +291,5 @@ export function usePhotoboxWorkflow() {
     sendSessionEmail,
     completeSession,
     reset,
-
-    // Utils
-    testBookingCodes,
   };
 }
-
