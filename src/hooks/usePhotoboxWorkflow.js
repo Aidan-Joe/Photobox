@@ -13,6 +13,7 @@ export function usePhotoboxWorkflow() {
     sessionId: null,
     printOptions: [],
     frames: [],
+    categories: [],
     filters: [],
     error: null,
     loading: false,
@@ -53,6 +54,9 @@ export function usePhotoboxWorkflow() {
       const frames =
         framesResult.frames || [];
 
+      const categories =
+        framesResult.categories || [];
+
       const filters =
         framesResult.filters || [];
 
@@ -62,6 +66,7 @@ export function usePhotoboxWorkflow() {
         bookingId,
         printOptions,
         frames,
+        categories,
         filters,
         loading: false,
       }));
@@ -82,6 +87,35 @@ export function usePhotoboxWorkflow() {
         loading: false,
       }));
 
+      throw error;
+    }
+  };
+
+  const createWalkinBooking = async () => {
+    setState(prev => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
+    try {
+      console.log('⚡ Creating walk-in booking...');
+      const result = await bookingAPI.createWalkinBooking();
+      const bookingCode = result.booking?.booking_code;
+
+      if (!bookingCode) {
+        throw new Error('Gagal membuat walk-in booking.');
+      }
+
+      return await verifyBooking(bookingCode);
+    } catch (error) {
+      console.error(error);
+      setState(prev => ({
+        ...prev,
+        step: 'error',
+        error: error.message,
+        loading: false,
+      }));
       throw error;
     }
   };
@@ -140,6 +174,19 @@ export function usePhotoboxWorkflow() {
       );
     } catch (error) {
       console.error(error);
+      throw error;
+    }
+  };
+
+  // SIMULATE PAYMENT SUCCESS FOR DEV MODE
+  const simulatePaymentSuccess = async (paymentId) => {
+    try {
+      await paymentAPI.midtransCallback({
+        order_id: paymentId || state.paymentId,
+        transaction_status: 'settlement',
+      });
+    } catch (error) {
+      console.error('Simulating payment success failed:', error);
       throw error;
     }
   };
@@ -273,6 +320,7 @@ export function usePhotoboxWorkflow() {
       sessionId: null,
       printOptions: [],
       frames: [],
+      categories: [],
       filters: [],
       error: null,
       loading: false,
@@ -284,8 +332,10 @@ export function usePhotoboxWorkflow() {
     ...state,
 
     verifyBooking,
+    createWalkinBooking,
     generatePaymentQR,
     checkPaymentStatus,
+    simulatePaymentSuccess,
     startSession,
     uploadPhotos,
     sendSessionEmail,

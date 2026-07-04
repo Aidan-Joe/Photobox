@@ -41,7 +41,17 @@ export default function PrintOption({
           <div className="pkg-grid">
             {printOptions.map((opt) => {
               const isSelected = selectedPrintOption === opt.id;
-              const quantity = opt.quantity || 2;
+              const quantity = opt.quantity || Number(opt.copies) || 2;
+              const name = opt.name || `${quantity} Cetak`;
+              const description = opt.description || `Mendapatkan ${quantity} lembar cetak foto strip fisik.`;
+              
+              // Format price: try total_amount, extra_price, or opt.price
+              let price = opt.price;
+              if (!price) {
+                const amount = opt.total_amount || opt.extra_price;
+                price = amount !== undefined ? `Rp ${Number(amount).toLocaleString('id-ID')}` : 'Rp 0';
+              }
+
               return (
                 <div
                   key={opt.id}
@@ -68,9 +78,9 @@ export default function PrintOption({
                     ))}
                   </div>
 
-                  <h3 className="pkg-card-title">{opt.name}</h3>
-                  <p className="pkg-card-desc">{opt.description}</p>
-                  <p className="pkg-card-price">{opt.price}</p>
+                  <h3 className="pkg-card-title">{name}</h3>
+                  <p className="pkg-card-desc">{description}</p>
+                  <p className="pkg-card-price">{price}</p>
                 </div>
               );
             })}

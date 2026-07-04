@@ -201,7 +201,7 @@ export default function Payment({
               </button>
             </div>
 
-            {mockMode && (
+            {(mockMode || import.meta.env.DEV) && (
               <button 
                 className="btn-success-mock" 
                 onClick={onPaymentSuccess}

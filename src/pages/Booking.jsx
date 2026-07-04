@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-export default function Booking({ bookingCode = '', setBookingCode, onSubmit, loading, error }) {
+export default function Booking({ bookingCode = '', setBookingCode, onSubmit, onBack, loading, error }) {
   // Ensure bookingCode is always string
   const codeStr = String(bookingCode || '');
 
@@ -38,6 +38,16 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, lo
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [codeStr, loading, onSubmit, setBookingCode]);
 
+  // Auto-submit when codeStr reaches 6 digits
+  useEffect(() => {
+    if (codeStr.length === 6 && !loading) {
+      const delaySubmit = setTimeout(() => {
+        onSubmit();
+      }, 400);
+      return () => clearTimeout(delaySubmit);
+    }
+  }, [codeStr, loading, onSubmit]);
+
   // Submit trigger
   const handleFormSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -51,9 +61,13 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, lo
   for (let i = 0; i < 6; i++) {
     const char = codeStr[i];
     const isFilled = char !== undefined;
+    const isActive = i === codeStr.length && !loading;
     digitBoxes.push(
-      <div key={i} className={`digit-box ${isFilled ? 'filled' : 'placeholder-dot'}`}>
-        {isFilled ? char : '•'}
+      <div 
+        key={i} 
+        className={`digit-box ${isFilled ? 'filled' : ''} ${isActive ? 'active' : ''} ${!isFilled && !isActive ? 'placeholder-dot' : ''}`}
+      >
+        {isFilled ? char : (isActive ? '' : '•')}
       </div>
     );
   }
@@ -101,7 +115,7 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, lo
       <div className="booking-right-panel">
         <div className="booking-card-wrapper">
           {/* Digit Inputs Display */}
-          <div className="digit-input-container">
+          <div className={`digit-input-container ${error ? 'shake-error' : ''}`}>
             {digitBoxes}
           </div>
 
@@ -147,6 +161,17 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, lo
           >
             {loading ? '⏳ Memverifikasi...' : 'Masukkan Kode'}
           </button>
+
+          {/* Back Button */}
+          {onBack && (
+            <button 
+              className="booking-back-btn" 
+              onClick={onBack}
+              disabled={loading}
+            >
+              Kembali
+            </button>
+          )}
         </div>
       </div>
 

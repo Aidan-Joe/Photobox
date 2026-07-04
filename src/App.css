@@ -730,6 +730,167 @@
   transform: none;
 }
 
+.digit-box.active {
+  border-color: #aa3bff;
+  box-shadow: 0 0 0 4px rgba(170, 59, 255, 0.15);
+  background-color: #ffffff;
+  position: relative;
+}
+
+/* Blinking cursor overlay */
+.digit-box.active::after {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 24px;
+  background-color: #aa3bff;
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  from, to { background-color: transparent }
+  50% { background-color: #aa3bff }
+}
+
+.booking-back-btn {
+  width: 100%;
+  background-color: transparent;
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 14px 0;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 12px;
+}
+
+.booking-back-btn:hover {
+  background-color: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.booking-back-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Shake Animation on Error */
+.digit-input-container.shake-error {
+  animation: shake-error-anim 0.4s cubic-bezier(.36,.07,.19,.97) both;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+@keyframes shake-error-anim {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+  40%, 60% { transform: translate3d(4px, 0, 0); }
+}
+
+/* ================= BOOKING OPTION SCREEN ================= */
+.booking-option-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 900px;
+  width: 100%;
+  padding: 0 40px;
+  box-sizing: border-box;
+  z-index: 5;
+}
+
+.booking-option-title {
+  font-size: 54px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+  line-height: 1.15;
+  letter-spacing: -1.5px;
+}
+
+.booking-option-description {
+  font-size: 16px;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0 0 40px 0;
+  max-width: 600px;
+}
+
+.booking-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  width: 100%;
+  max-width: 760px;
+  margin-bottom: 30px;
+}
+
+.option-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 24px;
+  padding: 36px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+  box-sizing: border-box;
+}
+
+.option-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.06);
+  border-color: #e2e8f0;
+}
+
+.option-card:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.option-card-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  transition: background 0.3s ease;
+}
+
+.option-card:hover .option-card-icon {
+  background: #f1f5f9;
+}
+
+.option-card-title {
+  font-size: 22px;
+  font-weight: 750;
+  color: #0f172a;
+  margin: 0 0 10px 0;
+}
+
+.option-card-desc {
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.45;
+  margin: 0;
+}
+
 /* ================= CHOOSE PACKAGE SCREEN ================= */
 .pkg-container {
   position: relative;
@@ -3180,3 +3341,122 @@
   border-radius: 50%;
   animation: pulse-dot 1.2s infinite ease-in-out;
 }
+
+/* ================= 1-PHOTO NEWSPAPER LAYOUT MOCKUP ================= */
+.preview-sheet-mockup.layout-1-photo {
+  padding: 0 !important;
+  border: none !important;
+}
+
+.preview-sheet-mockup.layout-1-photo .preview-slots-grid {
+  display: block !important;
+  position: absolute !important;
+  top: 246px !important;
+  left: 143px !important;
+  width: 155px !important;
+  height: 188px !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+  background: transparent !important;
+  border: none !important;
+  box-sizing: border-box !important;
+  gap: 0 !important;
+}
+
+.preview-sheet-mockup.layout-1-photo .preview-slots-grid .grid-slot {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  background-color: transparent !important;
+  border: none !important;
+}
+
+/* ================= MULTI-PHOTO VERTICAL STRIPS MOCKUPS (3 & 4 Photos) ================= */
+.preview-sheet-mockup.layout-3-photos {
+  width: 170px !important;
+  height: 512px !important;
+  padding: 34px 12px 144px 12px !important;
+  border: none !important;
+  background-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.15) !important;
+}
+
+.preview-sheet-mockup.layout-3-photos .preview-slots-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: repeat(3, 1fr) !important;
+  gap: 11px !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.preview-sheet-mockup.layout-3-photos .grid-slot {
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.preview-sheet-mockup.layout-4-photos {
+  width: 170px !important;
+  height: 500px !important;
+  padding: 30px 12px 91px 12px !important;
+  border: none !important;
+  background-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.15) !important;
+}
+
+.preview-sheet-mockup.layout-4-photos .preview-slots-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: repeat(4, 1fr) !important;
+  gap: 6px !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.preview-sheet-mockup.layout-4-photos .grid-slot {
+  border-radius: 4px !important;
+  border: none !important;
+}
+
+/* Revert border radius and border frame for custom DB frames (e.g. newspaper and custom vertical strips) */
+.preview-sheet-mockup.theme-custom-db {
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+/* Custom Newspaper grid arrangements when dynamic hole detection is off */
+.preview-sheet-mockup.layout-3-photos-newspaper .preview-slots-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  grid-template-rows: 1fr 2.05fr !important;
+  gap: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.preview-sheet-mockup.layout-3-photos-newspaper .preview-slots-grid .grid-slot:nth-child(3) {
+  grid-column: span 2 !important;
+}
+
+.preview-sheet-mockup.layout-3-photos-newspaper .grid-slot {
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.preview-sheet-mockup.layout-2-photos-newspaper .preview-slots-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  grid-template-rows: 1fr !important;
+  gap: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.preview-sheet-mockup.layout-2-photos-newspaper .grid-slot {
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+

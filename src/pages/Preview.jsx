@@ -1,4 +1,64 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+// Helper to crop photo using HTML5 Canvas according to scale and translate offsets
+const cropPhoto = (photoFile, transform, slotWidth, slotHeight) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = URL.createObjectURL(photoFile);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      
+      // Target high quality resolution
+      const tw = 600;
+      const th = Math.round(tw * (slotHeight / slotWidth));
+      canvas.width = tw;
+      canvas.height = th;
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Object-fit cover base calculations
+      const rs = tw / th;
+      const ri = img.width / img.height;
+      
+      let baseScale, baseX, baseY;
+      if (ri > rs) {
+        baseScale = th / img.height;
+        baseX = (tw - img.width * baseScale) / 2;
+        baseY = 0;
+      } else {
+        baseScale = tw / img.width;
+        baseX = 0;
+        baseY = (th - img.height * baseScale) / 2;
+      }
+      
+      const scaleFactor = tw / slotWidth;
+      const userScale = transform ? transform.scale : 1;
+      const userX = transform ? transform.x * scaleFactor : 0;
+      const userY = transform ? transform.y * scaleFactor : 0;
+      
+      ctx.save();
+      ctx.translate(tw / 2, th / 2);
+      ctx.translate(userX, userY);
+      ctx.scale(userScale, userScale);
+      ctx.translate(-tw / 2, -th / 2);
+      
+      ctx.drawImage(img, baseX, baseY, img.width * baseScale, img.height * baseScale);
+      ctx.restore();
+      
+      URL.revokeObjectURL(img.src);
+      
+      canvas.toBlob((blob) => {
+        const croppedFile = new File([blob], photoFile.name, { type: 'image/jpeg' });
+        resolve(croppedFile);
+      }, 'image/jpeg', 0.95);
+    };
+
+    img.onerror = (err) => {
+      console.error('Failed to load image for cropping:', err);
+      resolve(photoFile); // Fallback on error
+    };
+  });
+};
 
 function PreviewPhotoThumbnail({ photo }) {
   const [url, setUrl] = useState('');
@@ -19,6 +79,258 @@ function PreviewPhotoThumbnail({ photo }) {
   return <img src={url} alt="Captured Preview" className="preview-gallery-photo" />;
 }
 
+function InteractivePhotoSlot({ photo, slotIndex, transform, onTransformChange }) {
+  const [url, setUrl] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [initialOffset, setInitialOffset] = useState({ x: 0, y: 0 });
+  const [lastTouchDistance, setLastTouchDistance] = useState(null);
+  const [imgSize, setImgSize] = useState({ w: 1280, h: 720 });
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!photo) return;
+    const objectUrl = URL.createObjectURL(photo);
+    setUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [photo]);
+
+  const t = transform || { scale: 1, x: 0, y: 0 };
+
+  const clampTransform = (x, y, scale) => {
+    if (!containerRef.current) return { x, y, scale };
+    const slotWidth = containerRef.current.clientWidth;
+    const slotHeight = containerRef.current.clientHeight;
+    
+    // Calculate rendered size under object-fit: cover
+    const rs = slotWidth / slotHeight;
+    const ri = imgSize.w / imgSize.h;
+    
+    let rw, rh;
+    if (ri > rs) {
+      rw = slotHeight * ri;
+      rh = slotHeight;
+    } else {
+      rw = slotWidth;
+      rh = slotWidth / ri;
+    }
+    
+    const zw = rw * scale;
+    const zh = rh * scale;
+    
+    const maxX = Math.max(0, (zw - slotWidth) / 2);
+    const minX = -maxX;
+    const maxY = Math.max(0, (zh - slotHeight) / 2);
+    const minY = -maxY;
+    
+    return {
+      scale,
+      x: Math.min(Math.max(x, minX), maxX),
+      y: Math.min(Math.max(y, minY), maxY)
+    };
+  };
+
+  const updateTransform = (newT) => {
+    const nextT = { ...t, ...newT };
+    const clamped = clampTransform(nextT.x, nextT.y, nextT.scale);
+    onTransformChange(slotIndex, clamped);
+  };
+
+  const getTouchDistance = (e) => {
+    if (e.touches.length < 2) return null;
+    return Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  };
+
+  const handleStart = (clientX, clientY) => {
+    setIsDragging(true);
+    setDragStart({ x: clientX, y: clientY });
+    setInitialOffset({ x: t.x, y: t.y });
+  };
+
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    handleStart(e.clientX, e.clientY);
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      handleStart(e.touches[0].clientX, e.touches[0].clientY);
+      setLastTouchDistance(null);
+    } else if (e.touches.length === 2) {
+      setIsDragging(false);
+      setLastTouchDistance(getTouchDistance(e));
+    }
+  };
+
+  const handleMove = (clientX, clientY) => {
+    if (!isDragging) return;
+    const dx = clientX - dragStart.x;
+    const dy = clientY - dragStart.y;
+    updateTransform({
+      x: initialOffset.x + dx,
+      y: initialOffset.y + dy
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    handleMove(e.clientX, e.clientY);
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 1 && isDragging) {
+      handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    } else if (e.touches.length === 2) {
+      const dist = getTouchDistance(e);
+      if (dist && lastTouchDistance) {
+        const factor = dist / lastTouchDistance;
+        const newScale = Math.min(Math.max(t.scale * factor, 1), 4);
+        updateTransform({ scale: newScale });
+      }
+      setLastTouchDistance(dist);
+    }
+  };
+
+  const handleEnd = () => {
+    setIsDragging(false);
+    setLastTouchDistance(null);
+  };
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const zoomSpeed = 0.1;
+    const delta = e.deltaY < 0 ? 1 : -1;
+    const newScale = Math.min(Math.max(t.scale + delta * zoomSpeed, 1), 4);
+    updateTransform({ scale: newScale });
+  };
+
+  if (!url) {
+    return <div className="preview-photo-thumbnail-placeholder" />;
+  }
+
+  return (
+    <div 
+      ref={containerRef}
+      className="interactive-photo-container"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleEnd}
+      onMouseLeave={handleEnd}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleEnd}
+      onWheel={handleWheel}
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        overflow: 'hidden',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        touchAction: 'none'
+      }}
+    >
+      <img 
+        src={url} 
+        alt="Captured Preview" 
+        className="preview-gallery-photo" 
+        onLoad={(e) => setImgSize({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
+        style={{
+          transform: `translate(${t.x}px, ${t.y}px) scale(${t.scale})`,
+          transformOrigin: 'center',
+          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+          userSelect: 'none',
+          pointerEvents: 'none'
+        }}
+      />
+    </div>
+  );
+}
+
+const detectHoles = (img, w, h) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+  
+  const visited = new Uint8Array(w * h);
+  const holes = [];
+  
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const alpha = data[idx + 3];
+      const visitedIdx = y * w + x;
+      
+      if (alpha < 50 && visited[visitedIdx] === 0) {
+        let minX = x, maxX = x, minY = y, maxY = y;
+        const queue = [[x, y]];
+        visited[visitedIdx] = 1;
+        
+        let qHead = 0;
+        while (qHead < queue.length) {
+          const [cx, cy] = queue[qHead++];
+          
+          const neighbors = [
+            [cx + 1, cy],
+            [cx - 1, cy],
+            [cx, cy + 1],
+            [cx, cy - 1]
+          ];
+          
+          for (const [nx, ny] of neighbors) {
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+              const nIdx = ny * w + nx;
+              if (visited[nIdx] === 0) {
+                const nDataIdx = nIdx * 4;
+                const nAlpha = data[nDataIdx + 3];
+                if (nAlpha < 50) {
+                  visited[nIdx] = 1;
+                  queue.push([nx, ny]);
+                  if (nx < minX) minX = nx;
+                  if (nx > maxX) maxX = nx;
+                  if (ny < minY) minY = ny;
+                  if (ny > maxY) maxY = ny;
+                }
+              }
+            }
+          }
+        }
+        
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+        if (width > 15 && height > 15) {
+          holes.push({
+            left: minX,
+            top: minY,
+            width: width,
+            height: height
+          });
+        }
+      }
+    }
+  }
+  
+  // Sort holes: primary by top coordinate, secondary by left coordinate
+  holes.sort((a, b) => {
+    if (Math.abs(a.top - b.top) < 10) {
+      return a.left - b.left;
+    }
+    return a.top - b.top;
+  });
+  
+  return holes;
+};
+
 export default function Preview({ 
   previewTimer, 
   formatTime, 
@@ -27,13 +339,108 @@ export default function Preview({
   onSelectPhoto, 
   onProceed, 
   selectedFrame,
-  error 
+  error,
+  frames = []
 }) {
+  const [transforms, setTransforms] = useState({});
+  const [isCropping, setIsCropping] = useState(false);
+  const [frameRatio, setFrameRatio] = useState(null);
+  const [detectedHoles, setDetectedHoles] = useState([]);
+
+  const currentFrame = frames.find(f => String(f.id) === String(selectedFrame));
+  const totalNeeded = currentFrame ? parseInt(currentFrame.photo_count, 10) || 6 : 6;
+
+  useEffect(() => {
+    if (currentFrame && currentFrame.file_path) {
+      // Use the CORS-enabled backend media proxy route
+      const imgPath = `http://localhost:8080/api/customer/frame/media?path=${encodeURIComponent(currentFrame.file_path)}`;
+      
+      fetch(imgPath)
+        .then(res => res.blob())
+        .then(blob => {
+          const localUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          img.src = localUrl;
+          img.onload = () => {
+            const ratio = img.width / img.height;
+            setFrameRatio(ratio);
+            
+            const mockupH = 500;
+            const mockupW = Math.round(mockupH * ratio);
+            
+            const holes = detectHoles(img, mockupW, mockupH);
+            setDetectedHoles(holes);
+            URL.revokeObjectURL(localUrl);
+          };
+          img.onerror = () => {
+            setFrameRatio(null);
+            setDetectedHoles([]);
+            URL.revokeObjectURL(localUrl);
+          };
+        })
+        .catch(err => {
+          console.error('Failed to fetch frame image for canvas scan:', err);
+          // Fallback to proxy direct load
+          const img = new Image();
+          img.src = imgPath;
+          img.onload = () => {
+            const ratio = img.width / img.height;
+            setFrameRatio(ratio);
+          };
+        });
+    } else {
+      setFrameRatio(null);
+      setDetectedHoles([]);
+    }
+  }, [currentFrame]);
+
+  const handleTransformChange = (slotIndex, newTransform) => {
+    setTransforms(prev => ({
+      ...prev,
+      [slotIndex]: newTransform
+    }));
+  };
+
+  const handleProceed = async () => {
+    setIsCropping(true);
+    try {
+      const croppedFiles = [];
+      const slotElements = document.querySelectorAll('.preview-sheet-mockup .grid-slot');
+      
+      for (let idx = 0; idx < totalNeeded; idx++) {
+        const photoIdx = selectedPhotos[idx];
+        const photoFile = capturedPhotos[photoIdx];
+        if (!photoFile) continue;
+        
+        const slotEl = slotElements[idx];
+        const slotWidth = slotEl ? slotEl.clientWidth : 146;
+        const slotHeight = slotEl ? slotEl.clientHeight : 113;
+        
+        const transform = transforms[idx] || { scale: 1, x: 0, y: 0 };
+        const croppedFile = await cropPhoto(photoFile, transform, slotWidth, slotHeight);
+        croppedFiles.push(croppedFile);
+      }
+      
+      onProceed(croppedFiles);
+    } catch (err) {
+      console.error('Error cropping photos:', err);
+    } finally {
+      setIsCropping(false);
+    }
+  };
+
   // Helper to render photo inside a frame slot
   const renderFrameSlot = (slotIndex) => {
     const photoIdx = selectedPhotos[slotIndex];
     if (photoIdx !== undefined && capturedPhotos[photoIdx]) {
-      return <PreviewPhotoThumbnail photo={capturedPhotos[photoIdx]} />;
+      return (
+        <InteractivePhotoSlot 
+          photo={capturedPhotos[photoIdx]} 
+          slotIndex={slotIndex}
+          transform={transforms[slotIndex]}
+          onTransformChange={handleTransformChange}
+        />
+      );
     }
     return (
       <div className="preview-frame-slot-placeholder">
@@ -46,9 +453,30 @@ export default function Preview({
     );
   };
 
+  const normalizeFrameId = (id) => {
+    const idStr = String(id || '');
+    const match = idStr.match(/FRM-0*(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      return ((num - 1) % 6) + 1;
+    }
+    if (idStr === '1' || idStr === 'frm_demo_001') return 1;
+    if (idStr === '2' || idStr === 'frm_demo_002') return 2;
+    if (idStr === '3' || idStr === 'frm_demo_003') return 3;
+    if (idStr === '4' || idStr === 'frm_demo_004') return 4;
+    if (idStr === '5' || idStr === 'frm_demo_005') return 5;
+    if (idStr === '6' || idStr === 'frm_demo_006') return 6;
+    return Number(idStr) || 1;
+  };
+
+  const normalizedFrameNum = normalizeFrameId(selectedFrame);
+
   // Helper to determine frame style classes based on selectedFrame
   const getFrameThemeClass = () => {
-    switch (selectedFrame) {
+    if (currentFrame && currentFrame.file_path) {
+      return 'theme-custom-db';
+    }
+    switch (normalizedFrameNum) {
       case 1: return 'theme-soft-cloud';
       case 2: return 'theme-midnight-neon';
       case 3: return 'theme-cherry-blossom';
@@ -58,6 +486,27 @@ export default function Preview({
       default: return 'theme-soft-cloud';
     }
   };
+
+  const getLayoutClass = () => {
+    if (totalNeeded === 3) {
+      if (frameRatio && frameRatio >= 0.5) {
+        return 'layout-3-photos-newspaper';
+      }
+      return 'layout-3-photos';
+    }
+    if (totalNeeded === 2) {
+      if (frameRatio && frameRatio >= 0.5) {
+        return 'layout-2-photos-newspaper';
+      }
+      return 'layout-2-photos';
+    }
+    if (totalNeeded === 1) return 'layout-1-photo';
+    return `layout-${totalNeeded}-photos`;
+  };
+
+  // Calculate dynamic mockup dimensions
+  const mockupHeight = 500;
+  const mockupWidth = frameRatio ? Math.round(mockupHeight * frameRatio) : 320;
 
   return (
     <div className="preview-page-container">
@@ -77,10 +526,23 @@ export default function Preview({
       <div className="preview-main-layout">
         {/* Left Column: Interactive Live Frame Preview */}
         <div className="preview-left-column">
-          <div className={`preview-sheet-mockup ${getFrameThemeClass()}`}>
+          <div 
+            className={`preview-sheet-mockup ${getFrameThemeClass()} ${getLayoutClass()}`}
+            style={{
+              width: `${mockupWidth}px`,
+              height: `${mockupHeight}px`,
+              backgroundColor: totalNeeded === 1 ? '#ffffff' : 'transparent',
+              // Clean up styles for card/newspaper layouts to fit photo slots perfectly
+              ...(frameRatio && frameRatio >= 0.5 ? {
+                padding: '0px',
+                border: 'none',
+                borderRadius: '0px'
+              } : {})
+            }}
+          >
             
             {/* Soft Cloud specific background elements */}
-            {selectedFrame === 1 && (
+            {totalNeeded === 6 && normalizedFrameNum === 1 && (
               <>
                 <div className="deco-pixel-yellow left-top">★</div>
                 <div className="deco-mushroom left-mid">🍄</div>
@@ -92,7 +554,7 @@ export default function Preview({
             )}
 
             {/* Midnight Neon specific background elements */}
-            {selectedFrame === 2 && (
+            {totalNeeded === 6 && normalizedFrameNum === 2 && (
               <>
                 <div className="neon-circle c-1"></div>
                 <div className="neon-circle c-2"></div>
@@ -100,7 +562,7 @@ export default function Preview({
             )}
 
             {/* Cherry Blossom specific background elements */}
-            {selectedFrame === 3 && (
+            {totalNeeded === 6 && normalizedFrameNum === 3 && (
               <>
                 <div className="deco-petal p-1">🌸</div>
                 <div className="deco-petal p-2">🌸</div>
@@ -109,7 +571,7 @@ export default function Preview({
             )}
 
             {/* Kawaii Kitty specific background elements */}
-            {selectedFrame === 5 && (
+            {totalNeeded === 6 && normalizedFrameNum === 5 && (
               <>
                 <div className="kitty-whiskers l"></div>
                 <div className="kitty-whiskers r"></div>
@@ -117,27 +579,68 @@ export default function Preview({
             )}
 
             {/* Retro Wave specific background elements */}
-            {selectedFrame === 6 && (
+            {totalNeeded === 6 && normalizedFrameNum === 6 && (
               <>
                 <div className="retro-grid-bg"></div>
                 <div className="retro-sun-bg"></div>
               </>
             )}
 
-            {/* We render a 2x3 grid of slots representing the layout */}
-            <div className="preview-slots-grid">
-              <div className="grid-slot">{renderFrameSlot(0)}</div>
-              <div className="grid-slot">{renderFrameSlot(1)}</div>
-              <div className="grid-slot">{renderFrameSlot(2)}</div>
-              <div className="grid-slot">{renderFrameSlot(3)}</div>
-              <div className="grid-slot">{renderFrameSlot(4)}</div>
-              <div className="grid-slot">{renderFrameSlot(5)}</div>
-            </div>
+            {/* Render slots: absolutely positioned if holes are detected from the database frame, otherwise fallback to default grids */}
+            {detectedHoles.length > 0 ? (
+              detectedHoles.map((hole, idx) => (
+                <div 
+                  key={idx} 
+                  className="grid-slot"
+                  style={{
+                    position: 'absolute',
+                    left: `${hole.left}px`,
+                    top: `${hole.top}px`,
+                    width: `${hole.width}px`,
+                    height: `${hole.height}px`,
+                    borderRadius: '0px',
+                    border: 'none',
+                    margin: 0,
+                    padding: 0
+                  }}
+                >
+                  {renderFrameSlot(idx)}
+                </div>
+              ))
+            ) : (
+              <div className="preview-slots-grid">
+                {Array.from({ length: totalNeeded }).map((_, idx) => (
+                  <div key={idx} className="grid-slot">
+                    {renderFrameSlot(idx)}
+                  </div>
+                ))}
+              </div>
+            )}
 
-            <div className="sheet-footer-text">
-              <span className="footer-brand">frame</span>
-              <span className="footer-sub">YOUR JOY</span>
-            </div>
+            {/* Render the frame image overlay on top of the photos */}
+            {currentFrame && currentFrame.file_path && (
+              <img 
+                src={`http://localhost:8080/api/customer/frame/media?path=${encodeURIComponent(currentFrame.file_path)}`}
+                alt="Frame Overlay"
+                className="preview-frame-overlay"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'fill',
+                  pointerEvents: 'none',
+                  zIndex: 10
+                }}
+              />
+            )}
+
+            {totalNeeded === 6 && (
+              <div className="sheet-footer-text">
+                <span className="footer-brand">frame</span>
+                <span className="footer-sub">YOUR JOY</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -151,7 +654,7 @@ export default function Preview({
 
             <div className="preview-timer-container" style={{ justifyContent: 'flex-end' }}>
               <span className="preview-selection-counter">
-                ({selectedPhotos.length}/6 dipilih)
+                ({selectedPhotos.length}/{totalNeeded} dipilih)
               </span>
             </div>
 
@@ -178,11 +681,11 @@ export default function Preview({
             </div>
 
             <button 
-              onClick={onProceed} 
+              onClick={handleProceed} 
               className="preview-submit-btn" 
-              disabled={selectedPhotos.length !== 6}
+              disabled={selectedPhotos.length !== totalNeeded || isCropping}
             >
-              Lanjut ke Email
+              {isCropping ? '⏳ Memproses Foto...' : 'Lanjut ke Email'}
             </button>
             
             {error && <p className="kiosk-error" style={{ marginTop: '16px' }}>{error}</p>}

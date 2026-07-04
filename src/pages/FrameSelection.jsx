@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function FrameSelection({ frames, selectedFrame, onSelect, onProceed }) {
+export default function FrameSelection({ frames, categories = [], selectedFrame, onSelect, onProceed, error }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes (600 seconds)
 
@@ -24,16 +24,28 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const categories = ['All', 'Minimalist', 'Cute', 'Seasonal', 'Pop Art'];
+  // Convert categories array of objects/strings to standard string array, excluding duplicates of "All"
+  const rawCategories = categories && categories.length > 0
+    ? categories.map(c => typeof c === 'object' ? c.name : c)
+    : ['Minimalist', 'Cute', 'Seasonal', 'Pop Art'];
+
+  const cleanCategories = rawCategories.filter(c => c && c.toLowerCase() !== 'all');
+  const categoryList = ['All', ...cleanCategories];
 
   const filteredFrames = selectedCategory === 'All' 
     ? frames 
-    : frames.filter(f => f.category === selectedCategory);
+    : frames.filter(f => {
+        const frameCat = f.category || f.category_name || 'Minimalist';
+        return frameCat === selectedCategory;
+      });
 
   // Helper to render premium design preview based on ID
-  const renderFramePreview = (id) => {
+  const renderFramePreview = (frame) => {
+    const id = frame.id;
     switch(id) {
       case 1: // Soft Cloud
+      case '1':
+      case 'frm_demo_001':
         return (
           <div className="frame-preview-box preview-soft-cloud">
             <div className="polaroid-wrapper">
@@ -45,6 +57,8 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
           </div>
         );
       case 2: // Midnight Neon
+      case '2':
+      case 'frm_demo_002':
         return (
           <div className="frame-preview-box preview-midnight-neon">
             <div className="neon-border-wrapper">
@@ -53,6 +67,7 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
           </div>
         );
       case 3: // Cherry Blossom
+      case '3':
         return (
           <div className="frame-preview-box preview-cherry-blossom">
             <div className="cherry-border-wrapper">
@@ -65,6 +80,7 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
           </div>
         );
       case 4: // Classic White
+      case '4':
         return (
           <div className="frame-preview-box preview-classic-white">
             <div className="phone-wrapper">
@@ -74,6 +90,7 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
           </div>
         );
       case 5: // Kawaii Kitty
+      case '5':
         return (
           <div className="frame-preview-box preview-kawaii-kitty">
             <div className="kitty-wrapper">
@@ -84,6 +101,7 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
           </div>
         );
       case 6: // Retro Wave
+      case '6':
         return (
           <div className="frame-preview-box preview-retro-wave">
             <div className="retro-sun" />
@@ -91,6 +109,16 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
           </div>
         );
       default:
+        if (frame && frame.file_path) {
+          const imageUrl = frame.file_path.startsWith('http') 
+            ? frame.file_path 
+            : `http://localhost:8080/${frame.file_path}`;
+          return (
+            <div className="frame-preview-box preview-image" style={{ background: 'none' }}>
+              <img src={imageUrl} alt={frame.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            </div>
+          );
+        }
         return (
           <div className="frame-preview-box preview-default" />
         );
@@ -123,7 +151,7 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
         {/* Categories Bar */}
         <div className="frame-categories-bar">
           <div className="frame-categories-capsule">
-            {categories.map((category) => (
+            {categoryList.map((category) => (
               <button
                 key={category}
                 className={`frame-category-btn ${selectedCategory === category ? 'active' : ''}`}
@@ -139,6 +167,7 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
         <div className="frame-grid">
           {filteredFrames.map((frame) => {
             const isSelected = selectedFrame === frame.id;
+            const description = frame.description || 'Premium Photo Frame';
             return (
               <div
                 key={frame.id}
@@ -146,7 +175,7 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
                 className={`frame-card-item ${isSelected ? 'selected' : ''}`}
               >
                 <div className="frame-preview-container">
-                  {renderFramePreview(frame.id)}
+                  {renderFramePreview(frame)}
                   {isSelected && (
                     <div className="frame-selected-checkmark">
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -156,18 +185,53 @@ export default function FrameSelection({ frames, selectedFrame, onSelect, onProc
                   )}
                 </div>
                 <h3 className="frame-card-name">{frame.name}</h3>
-                <p className="frame-card-desc">{frame.description}</p>
+                <p className="frame-card-desc">{description}</p>
               </div>
             );
           })}
         </div>
 
+        {error && (
+          <div className="kiosk-error" style={{ marginBottom: '15px', padding: '12px', borderRadius: '8px', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', textAlign: 'center', fontWeight: 'bold' }}>
+            {error}
+          </div>
+        )}
+
         {/* Footer Actions Row */}
-        <div className="frame-actions-footer">
+        <div className="frame-actions-footer" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {import.meta.env.DEV && (
+            <button
+              className="btn-success-mock"
+              onClick={() => {
+                const defaultFrameId = frames && frames.length > 0 ? frames[0].id : 1;
+                onSelect(defaultFrameId);
+                onProceed(defaultFrameId);
+              }}
+              style={{
+                backgroundColor: '#10b981',
+                color: 'white',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'background-color 0.2s',
+                height: '46px'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              [Dev Mode] Auto Select & Proceed
+            </button>
+          )}
           <button
             className="btn-lanjut"
             disabled={!selectedFrame}
-            onClick={onProceed}
+            onClick={() => onProceed()}
             style={{ 
               marginLeft: 'auto', 
               opacity: selectedFrame ? 1 : 0.6,

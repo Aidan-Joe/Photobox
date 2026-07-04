@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit, loading, error }) {
+export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit, onBack, loading, error }) {
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
 
   // Timer countdown
@@ -87,8 +87,8 @@ export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit,
                 let keyLabel = key;
 
                 if (key === 'Backspace') {
-                  keyClass += " key-backspace";
-                  keyLabel = (
+                   keyClass += " key-backspace";
+                   keyLabel = (
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
                       <line x1="18" y1="9" x2="12" y2="15" />
@@ -117,8 +117,34 @@ export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit,
           ))}
         </div>
 
-        {/* Proceed Button */}
-        <div className="email-actions-container">
+        {/* Proceed & Back Buttons */}
+        <div className="email-actions-container" style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end', width: '100%', maxWidth: '840px' }}>
+          <button 
+            type="button"
+            onClick={onBack}
+            className="btn-kembali-email"
+            style={{
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+              fontSize: '18px',
+              fontWeight: '750',
+              padding: '16px 44px',
+              borderRadius: '50px',
+              border: '2px solid #e2e8f0',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Kembali
+          </button>
+
           <button 
             onClick={onSubmit} 
             className="btn-lanjut-email" 
@@ -130,9 +156,8 @@ export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit,
               <polyline points="12 5 19 12 12 19" />
             </svg>
           </button>
-          
-          {error && <p className="kiosk-error" style={{ marginTop: '12px' }}>{error}</p>}
         </div>
+        {error && <p className="kiosk-error" style={{ marginTop: '12px', width: '100%', textAlign: 'right', maxWidth: '840px' }}>{error}</p>}
       </div>
 
       {/* Footer bar */}
