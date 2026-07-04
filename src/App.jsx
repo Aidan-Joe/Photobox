@@ -5,10 +5,10 @@ import { useFetch } from './hooks/useFetch.js';
 import { useLocalStorage } from './hooks/useLocalStorage.js';
 import { usePhotoboxWorkflow } from './hooks/usePhotoboxWorkflow.js';
 import { CONFIG, ENDPOINTS } from './config.js';
-import { mockPrintOptions, mockFrames } from './mockData.js';
 
 // Page Components
 import Welcome from './pages/Welcome.jsx';
+import BookingOption from './pages/BookingOption.jsx';
 import Booking from './pages/Booking.jsx';
 import PrintOption from './pages/PrintOption.jsx';
 import Payment from './pages/Payment.jsx';
@@ -55,10 +55,14 @@ function App() {
   const [activePreviewPhoto, setActivePreviewPhoto] = useState(null);
   const [isTimerPaused, setIsTimerPaused] = useState(false);
   const [isCountingDown, setIsCountingDown] = useState(false);
+  const [croppedPhotos, setCroppedPhotos] = useState([]);
+
+  const currentFrameObj = workflow.frames && workflow.frames.find(f => String(f.id) === String(selectedFrame));
+  const maxPhotos = currentFrameObj ? parseInt(currentFrameObj.photo_count, 10) || 6 : 6;
 
   // ============ BOOKING PAGE ============
   const handleVerifyBooking = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setError(null);
     try {
       await workflow.verifyBooking(bookingCode);
@@ -106,10 +110,11 @@ function App() {
     setSelectedFrame(frameId);
   };
 
-  const handleProceedFromFrame = async () => {
-    if (!selectedFrame) return;
+  const handleProceedFromFrame = async (overrideFrameId) => {
+    const frameIdToUse = overrideFrameId || selectedFrame;
+    if (!frameIdToUse) return;
     try {
-      await workflow.startSession(selectedFrame, 1); // filter_id = 1 default
+      await workflow.startSession(frameIdToUse, 1); // filter_id = 1 default
       setCurrentPage('camera');
       setPhotoIndex(0);
       setCapturedPhotos([]);
@@ -212,18 +217,22 @@ function App() {
       if (prev.includes(photoIndex)) {
         return prev.filter(i => i !== photoIndex);
       }
-      if (prev.length >= 6) {
+      if (prev.length >= maxPhotos) {
+        if (maxPhotos === 1) {
+          return [photoIndex];
+        }
         return [...prev.slice(1), photoIndex];
       }
       return [...prev, photoIndex];
     });
   };
 
-  const handleProceedToEmail = () => {
-    if (selectedPhotos.length === 0) {
-      setError('Pilih minimal 1 foto!');
+  const handleProceedToEmail = (croppedFiles) => {
+    if (selectedPhotos.length !== maxPhotos) {
+      setError(`Pilih tepat ${maxPhotos} foto!`);
       return;
     }
+    setCroppedPhotos(croppedFiles || []);
     setCurrentPage('email');
   };
 
@@ -241,8 +250,10 @@ function App() {
 
     setError(null);
     try {
-      // Filter only selected photos
-      const filesToUpload = selectedPhotos.map(idx => capturedPhotos[idx]);
+      // Filter only selected photos, using cropped versions if available
+      const filesToUpload = croppedPhotos.length > 0 
+        ? croppedPhotos 
+        : selectedPhotos.map(idx => capturedPhotos[idx]);
       
       await workflow.uploadPhotos(filesToUpload);
       await workflow.sendSessionEmail(userEmail);
@@ -264,7 +275,31 @@ function App() {
   // ============ RENDER PAGES ============
   switch (currentPage) {
     case 'welcome':
-      return <Welcome onStart={() => setCurrentPage('booking')} />;
+      return <Welcome onStart={() => setCurrentPage('bookingOption')} />;
+
+    case 'bookingOption':
+      return (
+        <BookingOption
+          onSelectOption={async (option) => {
+            if (option === 'already_booked') {
+              setCurrentPage('booking');
+            } else if (option === 'walkin') {
+              setError(null);
+              try {
+                await workflow.createWalkinBooking();
+                setCurrentPage('printOption');
+              } catch (err) {
+                setError(err.message);
+              }
+            }
+          }}
+          onBack={() => {
+            setCurrentPage('welcome');
+          }}
+          loading={workflow.loading}
+          error={error}
+        />
+      );
 
     case 'booking':
       return (
@@ -272,6 +307,11 @@ function App() {
           bookingCode={bookingCode}
           setBookingCode={setBookingCode}
           onSubmit={handleVerifyBooking}
+          onBack={() => {
+            setError(null);
+            setBookingCode('');
+            setCurrentPage('bookingOption');
+          }}
           loading={workflow.loading}
           error={error}
         />
@@ -280,7 +320,7 @@ function App() {
     case 'printOption':
       return (
         <PrintOption
-          printOptions={mockPrintOptions}
+          printOptions={workflow.printOptions || []}
           selectedPrintOption={selectedPrintOption}
           onSelect={setSelectedPrintOption}
           onProceed={async () => {
@@ -288,29 +328,37 @@ function App() {
             setError(null);
             try {
               const result = await workflow.generatePaymentQR(selectedPrintOption);
-              setPaymentQrCode(result.qrCode);
+              setPaymentQrCode(result.midtrans?.qr_string || result.qrCode || '');
               setCurrentPage('payment');
             } catch (err) {
               setError(err.message);
             }
           }}
           onBack={() => {
-            setCurrentPage('booking');
+            setCurrentPage('bookingOption');
           }}
           error={error}
         />
       );
 
     case 'payment':
-      const selectedPkg = mockPrintOptions.find(opt => opt.id === selectedPrintOption);
+      const selectedPkg = workflow.printOptions && workflow.printOptions.find(opt => opt.id === selectedPrintOption);
       return (
         <Payment
           bookingId={workflow.bookingId}
           paymentId={workflow.paymentId}
           qrCode={paymentQrCode}
           selectedPackage={selectedPkg}
-          onPaymentSuccess={() => {
-            setCurrentPage('frame');
+          onPaymentSuccess={async () => {
+            setError(null);
+            try {
+              if (workflow.paymentId) {
+                await workflow.simulatePaymentSuccess(workflow.paymentId);
+              }
+              setCurrentPage('frame');
+            } catch (err) {
+              setError(err.message);
+            }
           }}
           onCancel={() => {
             setPaymentQrCode('');
@@ -320,7 +368,7 @@ function App() {
             if (!selectedPrintOption) return;
             try {
               const result = await workflow.generatePaymentQR(selectedPrintOption);
-              setPaymentQrCode(result.qrCode);
+              setPaymentQrCode(result.midtrans?.qr_string || result.qrCode || '');
             } catch (err) {
               console.error('Refresh QR failed:', err);
             }
@@ -337,10 +385,12 @@ function App() {
     case 'frame':
       return (
         <FrameSelection
-          frames={mockFrames}
+          frames={workflow.frames || []}
+          categories={workflow.categories || []}
           selectedFrame={selectedFrame}
           onSelect={handleSelectFrame}
           onProceed={handleProceedFromFrame}
+          error={error}
         />
       );
 
@@ -358,6 +408,7 @@ function App() {
           activePreviewPhoto={activePreviewPhoto}
           isCountingDown={isCountingDown}
           isTimerPaused={isTimerPaused}
+          frames={workflow.frames || []}
         />
       );
 
@@ -372,6 +423,7 @@ function App() {
           onProceed={handleProceedToEmail}
           selectedFrame={selectedFrame}
           error={error}
+          frames={workflow.frames || []}
         />
       );
 
@@ -382,6 +434,7 @@ function App() {
           onInputEmail={handleInputEmail}
           setUserEmail={setUserEmail}
           onSubmit={handleUploadPhotos}
+          onBack={() => setCurrentPage('preview')}
           loading={workflow.loading}
           error={error}
         />
@@ -396,6 +449,7 @@ function App() {
             setUserEmail('');
             setCapturedPhotos([]);
             setSelectedPhotos([]);
+            setCroppedPhotos([]);
             setPhotoIndex(0);
             setCurrentPage('welcome');
             workflow.reset();

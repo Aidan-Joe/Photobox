@@ -20,7 +20,7 @@ function PhotoThumbnail({ photo }) {
   return <img src={url} alt="Captured" className="camera-recent-shot-photo" />;
 }
 
-export default function Camera({ videoRef, photoIndex, countdown, selectedFrame, capturedPhotos = [], error, onCapture, isFlashing, activePreviewPhoto, isCountingDown, isTimerPaused }) {
+export default function Camera({ videoRef, photoIndex, countdown, selectedFrame, capturedPhotos = [], error, onCapture, isFlashing, activePreviewPhoto, isCountingDown, isTimerPaused, frames = [] }) {
   const [activePreviewUrl, setActivePreviewUrl] = useState('');
 
   useEffect(() => {
@@ -35,9 +35,28 @@ export default function Camera({ videoRef, photoIndex, countdown, selectedFrame,
     };
   }, [activePreviewPhoto]);
 
+  const currentFrame = frames.find(f => String(f.id) === String(selectedFrame));
+
+  const normalizeFrameId = (id) => {
+    const idStr = String(id || '');
+    const match = idStr.match(/FRM-0*(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      return ((num - 1) % 6) + 1;
+    }
+    if (idStr === '1' || idStr === 'frm_demo_001') return 1;
+    if (idStr === '2' || idStr === 'frm_demo_002') return 2;
+    if (idStr === '3' || idStr === 'frm_demo_003') return 3;
+    if (idStr === '4' || idStr === 'frm_demo_004') return 4;
+    if (idStr === '5' || idStr === 'frm_demo_005') return 5;
+    if (idStr === '6' || idStr === 'frm_demo_006') return 6;
+    return Number(idStr) || 1;
+  };
+
   // Helper to determine the overlay class
   const getOverlayClass = (frameId) => {
-    switch (frameId) {
+    const frameNum = normalizeFrameId(frameId);
+    switch (frameNum) {
       case 1: return 'overlay-soft-cloud';
       case 2: return 'overlay-midnight-neon';
       case 3: return 'overlay-cherry-blossom';

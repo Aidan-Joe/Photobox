@@ -78,32 +78,36 @@ export const apiClient = new ApiClient();
 // ============ BOOKING API ============
 export const bookingAPI = {
   // Verify booking dengan booking_code atau qr_code
-  verifyBooking: (data) => 
+  verifyBooking: (data) =>
     apiClient.post(ENDPOINTS.BOOKING_VERIFY, data),
   // data: { booking_code: string } atau { qr_code: string }
 
+  // Create dynamic walk-in booking
+  createWalkinBooking: () =>
+    apiClient.post('/customer/booking/create-walkin', {}),
+
   // Get print options berdasarkan booking_code
-  getPrintOptions: (bookingCode) => 
+  getPrintOptions: (bookingCode) =>
     apiClient.get(`${ENDPOINTS.PRINT_OPTIONS}?booking_code=${bookingCode}`),
 
   // Get available frames
-  getFrames: () => 
+  getFrames: () =>
     apiClient.get(ENDPOINTS.FRAMES),
 };
 
 // ============ PAYMENT API ============
 export const paymentAPI = {
   // Generate QR payment
-  generateQR: (data) => 
+  generateQR: (data) =>
     apiClient.post(ENDPOINTS.PAYMENT_QR, data),
   // data: { booking_id: number, print_option_id: number }
 
   // Get payment status
-  getPaymentStatus: (paymentId) => 
+  getPaymentStatus: (paymentId) =>
     apiClient.get(ENDPOINTS.PAYMENT_STATUS.replace('{paymentId}', paymentId)),
 
   // Midtrans callback handler
-  midtransCallback: (data) => 
+  midtransCallback: (data) =>
     apiClient.post(ENDPOINTS.PAYMENT_CALLBACK, data),
   // data: { order_id: string, transaction_status: string }
 };
@@ -111,7 +115,7 @@ export const paymentAPI = {
 // ============ SESSION API ============
 export const sessionAPI = {
   // Start a session
-  startSession: (data) => 
+  startSession: (data) =>
     apiClient.post(ENDPOINTS.SESSION_START, data),
   // data: { booking_id: number, frame_id: number, filter_id: number }
 
@@ -128,14 +132,14 @@ export const sessionAPI = {
   },
 
   // Send session result via email
-  sendEmail: (sessionId, email) => 
+  sendEmail: (sessionId, email) =>
     apiClient.post(
       ENDPOINTS.SESSION_EMAIL.replace('{sessionId}', sessionId),
       { email }
     ),
 
   // Complete session
-  completeSession: (sessionId) => 
+  completeSession: (sessionId) =>
     apiClient.post(
       ENDPOINTS.SESSION_COMPLETE.replace('{sessionId}', sessionId),
       {}
