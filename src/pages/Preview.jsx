@@ -40,12 +40,18 @@ function InteractivePhotoSlot({
   const containerRef = useRef(null);
 
   useEffect(() => {
-    if (!photo) return;
+    if (!photo) {
+      console.log("NO PHOTO");
+      return;
+    }
+
     const objectUrl = URL.createObjectURL(photo);
+
+    console.log(objectUrl);
+
     setUrl(objectUrl);
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
+
+    return () => URL.revokeObjectURL(objectUrl);
   }, [photo]);
 
   const t = transform || { scale: 1, x: 0, y: 0 };
@@ -189,16 +195,32 @@ function InteractivePhotoSlot({
       <img
         src={url}
         alt="Captured Preview"
-        className="preview-gallery-photo"
+        draggable={false}
         onLoad={(e) =>
-          setImgSize({ w: e.target.naturalWidth, h: e.target.naturalHeight })
+          setImgSize({
+            w: e.target.naturalWidth,
+            h: e.target.naturalHeight,
+          })
         }
         style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+
+          width: "100%",
+          height: "100%",
+
+          objectFit: "cover",
+
           transform: `translate(${t.x}px, ${t.y}px) scale(${t.scale})`,
-          transformOrigin: "center",
-          transition: isDragging ? "none" : "transform 0.1s ease-out",
+          transformOrigin: "center center",
+
+          transition: isDragging ? "none" : "transform .08s linear",
+
           userSelect: "none",
           pointerEvents: "none",
+
+          willChange: "transform",
         }}
       />
     </div>
@@ -220,56 +242,64 @@ export default function Preview({
   const [isCropping, setIsCropping] = useState(false);
   const [frameRatio, setFrameRatio] = useState(null);
   const [detectedHoles, setDetectedHoles] = useState([]);
+  const [frameSize, setFrameSize] = useState({
+    width: 0,
+    height: 0,
+  });
 
   const currentFrame = frames.find(
     (f) => String(f.id) === String(selectedFrame),
   );
+  const frameUrl = currentFrame?.file_path
+    ? `http://localhost:8080/api/frame/${currentFrame.file_path.split("/").pop()}`
+    : null;
   const totalNeeded = currentFrame
     ? parseInt(currentFrame.photo_count, 10) || 6
     : 6;
 
   useEffect(() => {
-    if (currentFrame && currentFrame.file_path) {
-      // Use the CORS-enabled backend media proxy route
-      const imgPath = `http://localhost:8080/api/customer/frame/media?path=${encodeURIComponent(currentFrame.file_path)}`;
-
-      fetch(imgPath)
-        .then((res) => res.blob())
-        .then((blob) => {
-          const localUrl = URL.createObjectURL(blob);
-          const img = new Image();
-          img.src = localUrl;
-          img.onload = () => {
-            const ratio = img.width / img.height;
-            setFrameRatio(ratio);
-
-            const mockupH = 500;
-            const mockupW = Math.round(mockupH * ratio);
-
-            const holes = detectHoles(img, mockupW, mockupH);
-            setDetectedHoles(holes);
-            URL.revokeObjectURL(localUrl);
-          };
-          img.onerror = () => {
-            setFrameRatio(null);
-            setDetectedHoles([]);
-            URL.revokeObjectURL(localUrl);
-          };
-        })
-        .catch((err) => {
-          console.error("Failed to fetch frame image for canvas scan:", err);
-          // Fallback to proxy direct load
-          const img = new Image();
-          img.src = imgPath;
-          img.onload = () => {
-            const ratio = img.width / img.height;
-            setFrameRatio(ratio);
-          };
-        });
-    } else {
+    if (!currentFrame?.file_path) {
       setFrameRatio(null);
+
       setDetectedHoles([]);
+
+      setFrameSize({
+        width: 0,
+        height: 0,
+      });
+
+      return;
     }
+
+    const imgPath = frameUrl;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      const ratio = img.naturalWidth / img.naturalHeight;
+
+      setFrameRatio(ratio);
+
+      setFrameSize({
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      });
+
+      const holes = detectHoles(img, img.naturalWidth, img.naturalHeight);
+      console.log("FRAME WIDTH", img.naturalWidth);
+      console.log("FRAME HEIGHT", img.naturalHeight);
+
+      console.log("HOLES", holes);
+
+      setDetectedHoles(holes);
+    };
+
+    img.onerror = (err) => {
+      console.error("Failed loading frame:", err);
+    };
+
+    img.src = imgPath;
   }, [currentFrame]);
 
   const handleTransformChange = (slotIndex, newTransform) => {
@@ -305,14 +335,17 @@ export default function Preview({
           x: 0,
           y: 0,
         };
-
+        const hole = detectedHoles[idx] ?? {
+          left: 0,
+          top: 0,
+          width: slotWidth,
+          height: slotHeight,
+        };
         const cropped = await cropPhoto(
           photoFile,
           transform,
           slotWidth,
           slotHeight,
-          hole.width * scaleX,
-          hole.height * scaleY,
         );
 
         croppedFiles.push(cropped);
@@ -320,26 +353,18 @@ export default function Preview({
 
       // Frame URL
       const frameUrl = currentFrame?.file_path
-        ? `http://localhost:8080/api/customer/frame/media?path=${encodeURIComponent(
-            currentFrame.file_path,
-          )}`
+        ? `http://localhost:8080/api/frame/${currentFrame.file_path.split("/").pop()}`
         : null;
-
-      // Render final image
-      let finalImage = null;
 
       if (frameUrl && detectedHoles.length > 0 && croppedFiles.length > 0) {
         finalImage = await renderFinalImage({
           frameUrl,
-
           croppedPhotos: croppedFiles,
-
           holes: detectedHoles,
-
-          width: mockupWidth,
-
-          height: mockupHeight,
+          width: frameSize.width,
+          height: frameSize.height,
         });
+
         console.log(finalImage);
 
         const previewUrl = URL.createObjectURL(finalImage);
@@ -360,6 +385,7 @@ export default function Preview({
   };
 
   // Helper to render photo inside a frame slot
+
   const renderFrameSlot = (slotIndex) => {
     const photoIdx = selectedPhotos[slotIndex];
     if (photoIdx !== undefined && capturedPhotos[photoIdx]) {
@@ -393,67 +419,13 @@ export default function Preview({
     );
   };
 
-  const normalizeFrameId = (id) => {
-    const idStr = String(id || "");
-    const match = idStr.match(/FRM-0*(\d+)/i);
-    if (match) {
-      const num = parseInt(match[1], 10);
-      return ((num - 1) % 6) + 1;
-    }
-    if (idStr === "1" || idStr === "frm_demo_001") return 1;
-    if (idStr === "2" || idStr === "frm_demo_002") return 2;
-    if (idStr === "3" || idStr === "frm_demo_003") return 3;
-    if (idStr === "4" || idStr === "frm_demo_004") return 4;
-    if (idStr === "5" || idStr === "frm_demo_005") return 5;
-    if (idStr === "6" || idStr === "frm_demo_006") return 6;
-    return Number(idStr) || 1;
-  };
-
-  const normalizedFrameNum = normalizeFrameId(selectedFrame);
-
-  // Helper to determine frame style classes based on selectedFrame
-  const getFrameThemeClass = () => {
-    if (currentFrame && currentFrame.file_path) {
-      return "theme-custom-db";
-    }
-    switch (normalizedFrameNum) {
-      case 1:
-        return "theme-soft-cloud";
-      case 2:
-        return "theme-midnight-neon";
-      case 3:
-        return "theme-cherry-blossom";
-      case 4:
-        return "theme-classic-white";
-      case 5:
-        return "theme-kawaii-kitty";
-      case 6:
-        return "theme-retro-wave";
-      default:
-        return "theme-soft-cloud";
-    }
-  };
-
-  const getLayoutClass = () => {
-    if (totalNeeded === 3) {
-      if (frameRatio && frameRatio >= 0.5) {
-        return "layout-3-photos-newspaper";
-      }
-      return "layout-3-photos";
-    }
-    if (totalNeeded === 2) {
-      if (frameRatio && frameRatio >= 0.5) {
-        return "layout-2-photos-newspaper";
-      }
-      return "layout-2-photos";
-    }
-    if (totalNeeded === 1) return "layout-1-photo";
-    return `layout-${totalNeeded}-photos`;
-  };
-
   // Calculate dynamic mockup dimensions
   const mockupHeight = 500;
   const mockupWidth = frameRatio ? Math.round(mockupHeight * frameRatio) : 320;
+  const previewScaleX = frameSize.width > 0 ? mockupWidth / frameSize.width : 1;
+
+  const previewScaleY =
+    frameSize.height > 0 ? mockupHeight / frameSize.height : 1;
 
   return (
     <div className="preview-page-container">
@@ -484,10 +456,12 @@ export default function Preview({
         {/* Left Column: Interactive Live Frame Preview */}
         <div className="preview-left-column">
           <div
-            className={`preview-sheet-mockup ${getFrameThemeClass()} ${getLayoutClass()}`}
+            className={`preview-sheet-mockup `}
             style={{
+              position: "relative",
               width: `${mockupWidth}px`,
               height: `${mockupHeight}px`,
+              overflow: "hidden",
               backgroundColor: totalNeeded === 1 ? "#ffffff" : "transparent",
               // Clean up styles for card/newspaper layouts to fit photo slots perfectly
               ...(frameRatio && frameRatio >= 0.5
@@ -499,51 +473,6 @@ export default function Preview({
                 : {}),
             }}
           >
-            {/* Soft Cloud specific background elements */}
-            {totalNeeded === 6 && normalizedFrameNum === 1 && (
-              <>
-                <div className="deco-pixel-yellow left-top">★</div>
-                <div className="deco-mushroom left-mid">🍄</div>
-                <div className="deco-pixel-yellow right-mid">★</div>
-                <div className="deco-mushroom right-bottom">🍄</div>
-                <div className="deco-green-blob left-bottom"></div>
-                <div className="deco-green-blob right-bottom-blob"></div>
-              </>
-            )}
-
-            {/* Midnight Neon specific background elements */}
-            {totalNeeded === 6 && normalizedFrameNum === 2 && (
-              <>
-                <div className="neon-circle c-1"></div>
-                <div className="neon-circle c-2"></div>
-              </>
-            )}
-
-            {/* Cherry Blossom specific background elements */}
-            {totalNeeded === 6 && normalizedFrameNum === 3 && (
-              <>
-                <div className="deco-petal p-1">🌸</div>
-                <div className="deco-petal p-2">🌸</div>
-                <div className="deco-petal p-3">🌸</div>
-              </>
-            )}
-
-            {/* Kawaii Kitty specific background elements */}
-            {totalNeeded === 6 && normalizedFrameNum === 5 && (
-              <>
-                <div className="kitty-whiskers l"></div>
-                <div className="kitty-whiskers r"></div>
-              </>
-            )}
-
-            {/* Retro Wave specific background elements */}
-            {totalNeeded === 6 && normalizedFrameNum === 6 && (
-              <>
-                <div className="retro-grid-bg"></div>
-                <div className="retro-sun-bg"></div>
-              </>
-            )}
-
             {/* Render slots: absolutely positioned if holes are detected from the database frame, otherwise fallback to default grids */}
             {detectedHoles.length > 0 ? (
               detectedHoles.map((hole, idx) => (
@@ -552,14 +481,15 @@ export default function Preview({
                   className="grid-slot"
                   style={{
                     position: "absolute",
-                    left: `${hole.left}px`,
-                    top: `${hole.top}px`,
-                    width: `${hole.width}px`,
-                    height: `${hole.height}px`,
+                    left: `${hole.left * previewScaleX}px`,
+                    top: `${hole.top * previewScaleY}px`,
+                    width: `${hole.width * previewScaleX}px`,
+                    height: `${hole.height * previewScaleY}px`,
                     borderRadius: "0px",
                     border: "none",
                     margin: 0,
                     padding: 0,
+                    overflow: "hidden",
                   }}
                 >
                   {renderFrameSlot(idx)}
@@ -578,7 +508,8 @@ export default function Preview({
             {/* Render the frame image overlay on top of the photos */}
             {currentFrame && currentFrame.file_path && (
               <img
-                src={`http://localhost:8080/api/customer/frame/media?path=${encodeURIComponent(currentFrame.file_path)}`}
+                crossOrigin="anonymous"
+                src={frameUrl}
                 alt="Frame Overlay"
                 className="preview-frame-overlay"
                 style={{
