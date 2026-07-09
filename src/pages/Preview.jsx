@@ -314,6 +314,7 @@ export default function Preview({
 
     try {
       const croppedFiles = [];
+      let finalImage = null;
 
       const slotElements = document.querySelectorAll(
         ".preview-sheet-mockup .grid-slot",
@@ -364,19 +365,22 @@ export default function Preview({
           width: frameSize.width,
           height: frameSize.height,
         });
+        if (!finalImage) {
+          throw new Error("Final image gagal dibuat.");
+        }
+        console.log("FINAL IMAGE", finalImage);
+        console.log("SIZE", finalImage.size);
 
-        console.log(finalImage);
+        //const previewUrl = URL.createObjectURL(finalImage);
 
-        const previewUrl = URL.createObjectURL(finalImage);
-
-        window.open(previewUrl);
+        //window.open(previewUrl);
       }
-
-      onProceed({
-        croppedFiles,
-
-        finalImage,
-      });
+      console.log("========= PREVIEW =========");
+      console.log("croppedFiles", croppedFiles);
+      console.log("jumlah", croppedFiles.length);
+      console.log("finalImage", finalImage);
+      console.log("===========================");
+      await onProceed({ croppedFiles, finalImage });
     } catch (err) {
       console.error("Failed creating final image:", err);
     } finally {

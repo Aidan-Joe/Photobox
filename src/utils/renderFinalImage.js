@@ -2,6 +2,9 @@ function loadImage(source) {
   return new Promise((resolve, reject) => {
     const image = new Image();
 
+    // WAJIB sebelum image.src
+    image.crossOrigin = "anonymous";
+
     if (source instanceof File || source instanceof Blob) {
       image.src = URL.createObjectURL(source);
     } else {
@@ -85,13 +88,7 @@ export async function renderFinalImage({
   }
 
   // Overlay frame paling atas
-  ctx.drawImage(
-    frame,
-    0,
-    0,
-    frameWidth,
-    frameHeight,
-  );
+  ctx.drawImage(frame, 0, 0, frameWidth, frameHeight);
 
   return await canvasToFile(canvas);
 }

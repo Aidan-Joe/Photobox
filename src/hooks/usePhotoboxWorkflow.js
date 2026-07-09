@@ -1,13 +1,9 @@
-import { useState } from 'react';
-import {
-  bookingAPI,
-  paymentAPI,
-  sessionAPI,
-} from '../services/api.js';
+import { useState } from "react";
+import { bookingAPI, paymentAPI, sessionAPI } from "../services/api.js";
 
 export function usePhotoboxWorkflow() {
   const [state, setState] = useState({
-    step: 'idle',
+    step: "idle",
     bookingId: null,
     paymentId: null,
     sessionId: null,
@@ -22,15 +18,15 @@ export function usePhotoboxWorkflow() {
 
   // STEP 1 - VERIFY BOOKING
   const verifyBooking = async (bookingCodeOrQR) => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      step: 'verifying',
+      step: "verifying",
       loading: true,
       error: null,
     }));
 
     try {
-      console.log('🔍 Verifying booking:', bookingCodeOrQR);
+      console.log("🔍 Verifying booking:", bookingCodeOrQR);
 
       const bookingResult = await bookingAPI.verifyBooking({
         booking_code: bookingCodeOrQR,
@@ -39,30 +35,25 @@ export function usePhotoboxWorkflow() {
       const bookingId = bookingResult.booking?.id;
 
       if (!bookingId) {
-        throw new Error('Booking tidak ditemukan');
+        throw new Error("Booking tidak ditemukan");
       }
 
       const printOptionsResult =
         await bookingAPI.getPrintOptions(bookingCodeOrQR);
 
-      const framesResult =
-        await bookingAPI.getFrames();
+      const framesResult = await bookingAPI.getFrames();
 
-      const printOptions =
-        printOptionsResult.print_options || [];
+      const printOptions = printOptionsResult.print_options || [];
 
-      const frames =
-        framesResult.frames || [];
+      const frames = framesResult.frames || [];
 
-      const categories =
-        framesResult.categories || [];
+      const categories = framesResult.categories || [];
 
-      const filters =
-        framesResult.filters || [];
+      const filters = framesResult.filters || [];
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'verified',
+        step: "verified",
         bookingId,
         printOptions,
         frames,
@@ -80,9 +71,9 @@ export function usePhotoboxWorkflow() {
     } catch (error) {
       console.error(error);
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'error',
+        step: "error",
         error: error.message,
         loading: false,
       }));
@@ -92,27 +83,27 @@ export function usePhotoboxWorkflow() {
   };
 
   const createWalkinBooking = async () => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
       loading: true,
       error: null,
     }));
 
     try {
-      console.log('⚡ Creating walk-in booking...');
+      console.log("⚡ Creating walk-in booking...");
       const result = await bookingAPI.createWalkinBooking();
       const bookingCode = result.booking?.booking_code;
 
       if (!bookingCode) {
-        throw new Error('Gagal membuat walk-in booking.');
+        throw new Error("Gagal membuat walk-in booking.");
       }
 
       return await verifyBooking(bookingCode);
     } catch (error) {
       console.error(error);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'error',
+        step: "error",
         error: error.message,
         loading: false,
       }));
@@ -122,9 +113,9 @@ export function usePhotoboxWorkflow() {
 
   // STEP 2 - GENERATE PAYMENT QR
   const generatePaymentQR = async (printOptionId) => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      step: 'paying',
+      step: "paying",
       loading: true,
       error: null,
     }));
@@ -135,11 +126,9 @@ export function usePhotoboxWorkflow() {
         print_option_id: printOptionId,
       });
 
-      const paymentId =
-        result.payment?.id ||
-        result.payment_id;
+      const paymentId = result.payment?.id || result.payment_id;
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         paymentId,
         loading: false,
@@ -151,9 +140,9 @@ export function usePhotoboxWorkflow() {
         midtrans: result.midtrans,
       };
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'error',
+        step: "error",
         error: error.message,
         loading: false,
       }));
@@ -165,13 +154,9 @@ export function usePhotoboxWorkflow() {
   // STEP 3 - CHECK PAYMENT STATUS
   const checkPaymentStatus = async (paymentId) => {
     try {
-      const result =
-        await paymentAPI.getPaymentStatus(paymentId);
+      const result = await paymentAPI.getPaymentStatus(paymentId);
 
-      return (
-        result.payment?.status ||
-        'pending'
-      );
+      return result.payment?.status || "pending";
     } catch (error) {
       console.error(error);
       throw error;
@@ -183,39 +168,37 @@ export function usePhotoboxWorkflow() {
     try {
       await paymentAPI.midtransCallback({
         order_id: paymentId || state.paymentId,
-        transaction_status: 'settlement',
+        transaction_status: "settlement",
       });
     } catch (error) {
-      console.error('Simulating payment success failed:', error);
+      console.error("Simulating payment success failed:", error);
       throw error;
     }
   };
 
   // STEP 4 - START SESSION
   const startSession = async (frameId, filterId) => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      step: 'processing',
+      step: "processing",
       loading: true,
       error: null,
     }));
 
     try {
-      const result =
-        await sessionAPI.startSession({
-          booking_id: state.bookingId,
-          frame_id: frameId,
-          filter_id: filterId,
-        });
+      const result = await sessionAPI.startSession({
+        booking_id: state.bookingId,
+        frame_id: frameId,
+        filter_id: filterId,
+      });
 
-      const sessionId =
-        result.session?.id;
+      const sessionId = result.session?.id;
 
       if (!sessionId) {
-        throw new Error('Session gagal dibuat');
+        throw new Error("Session gagal dibuat");
       }
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         sessionId,
         loading: false,
@@ -226,9 +209,9 @@ export function usePhotoboxWorkflow() {
         session: result.session,
       };
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'error',
+        step: "error",
         error: error.message,
         loading: false,
       }));
@@ -238,72 +221,71 @@ export function usePhotoboxWorkflow() {
   };
 
   // STEP 5 - UPLOAD PHOTOS
-  const uploadPhotos = async (files) => {
-    setState(prev => ({
+  const uploadSessionFiles = async (finalImage, capturedPhotos) => {
+    setState((prev) => ({
       ...prev,
-      step: 'uploading',
+      step: "uploading",
       loading: true,
       error: null,
     }));
 
     try {
-      const result =
-        await sessionAPI.uploadPhotos(
-          state.sessionId,
-          files
-        );
+      const result = await sessionAPI.uploadSessionFiles(
+        state.sessionId,
+        finalImage,
+        capturedPhotos,
+      );
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         loading: false,
       }));
 
       return result;
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'error',
+        step: "error",
         error: error.message,
         loading: false,
       }));
 
       throw error;
     }
+    console.log("WORKFLOW");
+
+    console.log(finalImage);
+
+    console.log(capturedPhotos);
   };
 
   // STEP 6 - SAVE EMAIL
   const sendSessionEmail = async (email) => {
-    return await sessionAPI.sendEmail(
-      state.sessionId,
-      email
-    );
+    return await sessionAPI.sendEmail(state.sessionId, email);
   };
 
   // STEP 7 - COMPLETE SESSION
   const completeSession = async () => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
       loading: true,
       error: null,
     }));
 
     try {
-      const result =
-        await sessionAPI.completeSession(
-          state.sessionId
-        );
+      const result = await sessionAPI.completeSession(state.sessionId);
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'complete',
+        step: "complete",
         loading: false,
       }));
 
       return result;
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        step: 'error',
+        step: "error",
         error: error.message,
         loading: false,
       }));
@@ -314,7 +296,7 @@ export function usePhotoboxWorkflow() {
 
   const reset = () => {
     setState({
-      step: 'idle',
+      step: "idle",
       bookingId: null,
       paymentId: null,
       sessionId: null,
@@ -337,7 +319,7 @@ export function usePhotoboxWorkflow() {
     checkPaymentStatus,
     simulatePaymentSuccess,
     startSession,
-    uploadPhotos,
+    uploadSessionFiles,
     sendSessionEmail,
     completeSession,
     reset,
