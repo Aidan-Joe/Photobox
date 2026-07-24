@@ -18,10 +18,20 @@ import Camera from "./pages/Camera.jsx";
 import Preview from "./pages/Preview.jsx";
 import Email from "./pages/Email.jsx";
 import Done from "./pages/Done.jsx";
+import AdminSettings from "./pages/AdminSettings.jsx";
 
 function App() {
   // Hooks
   const camera = useCamera();
+  const {
+    startCamera,
+    stopCamera,
+    takePhoto,
+    getCameraList,
+    stream: cameraStream,
+    videoRef: cameraVideoRef,
+    error: cameraError,
+  } = camera;
   const workflow = usePhotoboxWorkflow();
   const [bookingCode, setBookingCode] = useLocalStorage("bookingCode", "");
   const [userEmail, setUserEmail] = useLocalStorage("userEmail", "");
@@ -59,12 +69,25 @@ function App() {
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [croppedPhotos, setCroppedPhotos] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
+  const [finalVideoTransition, setFinalVideoTransition] = useState(null);
+  const [finalVideoLoop, setFinalVideoLoop] = useState(null);
+  const [reviewCountdown, setReviewCountdown] = useState(0);
+  const [captureDelay, setCaptureDelay] = useState(10); // default 10s capture delay
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState(() => {
+    return localStorage.getItem('kiosk_camera_device_id') || '';
+  });
+  
+  // Live Photo (Secret Boomerang short video) states
+  const [livePhotos, setLivePhotos] = useState([]);
+  const mediaRecorderRef = useRef(null);
+  const videoChunksRef = useRef([]);
 
   const currentFrameObj =
     workflow.frames &&
     workflow.frames.find((f) => String(f.id) === String(selectedFrame));
   const maxPhotos = currentFrameObj
-    ? parseInt(currentFrameObj.photo_count, 10) || 6
+    ? parseInt(currentFrameObj.layout_photo_count || currentFrameObj.photo_count, 10) || 6
     : 6;
 
   // ============ BOOKING PAGE ============
@@ -125,9 +148,10 @@ function App() {
       setCurrentPage("camera");
       setPhotoIndex(0);
       setCapturedPhotos([]);
+      setLivePhotos([]); // Reset secret live photos
 
       // Start camera
-      await camera.startCamera("user");
+      await startCamera("user");
 
       setCountdown(0);
       setIsCountingDown(false);
@@ -145,11 +169,82 @@ function App() {
     )
       return;
     setIsCountingDown(true);
-    setCountdown(3);
+    setCountdown(captureDelay);
   };
+
+  const handleKeepPhoto = useCallback(() => {
+    setReviewCountdown(0);
+    setActivePreviewPhoto(null);
+    setIsTimerPaused(false);
+    isCapturingRef.current = false;
+
+    if (photoIndex >= 10) {
+      stopCamera();
+      setCurrentPage("preview");
+      setPreviewTimer(420); // Reset 7 menit timer
+    } else {
+      setCountdown(0);
+      setIsCountingDown(false);
+    }
+  }, [photoIndex, stopCamera]);
+
+  // Start secret live photo video recording
+  const startRecording = useCallback(() => {
+    const stream = cameraStream;
+    if (!stream) {
+      console.warn("No stream available to record live photo.");
+      return;
+    }
+
+    videoChunksRef.current = [];
+    try {
+      let options = { mimeType: 'video/webm;codecs=vp9' };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: 'video/webm;codecs=vp8' };
+      }
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: 'video/webm' };
+      }
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: 'video/mp4' };
+      }
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = {};
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          videoChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const videoBlob = new Blob(videoChunksRef.current, { type: 'video/mp4' });
+        setLivePhotos((prev) => [...prev, videoBlob]);
+        console.log("Secret Live Photo captured. Video Blob size:", videoBlob.size);
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      console.log("Started secret live photo recording...");
+    } catch (e) {
+      console.error("Failed to start MediaRecorder for live photo:", e);
+    }
+  }, [cameraStream]);
 
   const capturePhoto = useCallback(async () => {
     if (photoIndex >= 10 || isTimerPaused || isCapturingRef.current) return;
+
+    // Stop recording secret live photo
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try {
+        mediaRecorderRef.current.stop();
+        console.log("Stopped secret live photo recording.");
+      } catch (e) {
+        console.error("Error stopping MediaRecorder:", e);
+      }
+    }
 
     isCapturingRef.current = true;
 
@@ -158,7 +253,7 @@ function App() {
     setTimeout(() => setIsFlashing(false), 150);
 
     try {
-      const photo = await camera.takePhoto();
+      const photo = await takePhoto();
       if (photo) {
         setCapturedPhotos((prev) => [...prev, photo]);
         setActivePreviewPhoto(photo);
@@ -166,21 +261,9 @@ function App() {
 
         const nextIndex = photoIndex + 1;
         setPhotoIndex(nextIndex);
-
-        setTimeout(() => {
-          setActivePreviewPhoto(null);
-          setIsTimerPaused(false);
-          isCapturingRef.current = false;
-
-          if (nextIndex >= 10) {
-            camera.stopCamera();
-            setCurrentPage("preview");
-            setPreviewTimer(420); // Reset 7 menit timer
-          } else {
-            setCountdown(0);
-            setIsCountingDown(false);
-          }
-        }, 1500);
+        
+        // Start 10-second review/retake thinking timer
+        setReviewCountdown(10);
       } else {
         isCapturingRef.current = false;
       }
@@ -188,7 +271,73 @@ function App() {
       console.error("Capture error:", err);
       isCapturingRef.current = false;
     }
-  }, [camera, photoIndex, isTimerPaused]);
+  }, [takePhoto, photoIndex, isTimerPaused]);
+
+  const handleRetakePhoto = useCallback(() => {
+    if (capturedPhotos.length === 0) return;
+    
+    setReviewCountdown(0);
+    setActivePreviewPhoto(null);
+    setIsTimerPaused(false);
+    isCapturingRef.current = false;
+
+    setCapturedPhotos((prev) => prev.slice(0, -1));
+    setLivePhotos((prev) => prev.slice(0, -1)); // Discard corresponding secret video
+    setPhotoIndex((prev) => Math.max(0, prev - 1));
+    setCountdown(0);
+    setIsCountingDown(false);
+  }, [capturedPhotos]);
+
+  // Load and switch camera devices
+  useEffect(() => {
+    if (currentPage === "camera") {
+      getCameraList().then((devices) => {
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        setCameraDevices(videoDevices);
+        if (videoDevices.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+        }
+      });
+    }
+  }, [currentPage, getCameraList, selectedDeviceId]);
+
+  const handleSelectCameraDevice = useCallback(async (deviceId) => {
+    setSelectedDeviceId(deviceId);
+    try {
+      stopCamera();
+      await new Promise(r => setTimeout(r, 400));
+      await startCamera(deviceId);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [stopCamera, startCamera]);
+
+  // Secret access to admin setup page
+  useEffect(() => {
+    const handleAdminKeydown = (e) => {
+      if (currentPage === "welcome" && e.ctrlKey && e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        setCurrentPage("admin");
+      }
+    };
+    window.addEventListener("keydown", handleAdminKeydown);
+    return () => window.removeEventListener("keydown", handleAdminKeydown);
+  }, [currentPage]);
+
+  // Review Countdown Timer effect
+  useEffect(() => {
+    if (currentPage !== "camera" || !activePreviewPhoto || reviewCountdown <= 0) return;
+
+    const timer = setTimeout(() => {
+      if (reviewCountdown === 1) {
+        handleKeepPhoto();
+      } else {
+        setReviewCountdown((prev) => prev - 1);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [currentPage, activePreviewPhoto, reviewCountdown, handleKeepPhoto]);
 
   // ============ CAMERA PAGE - Countdown & Auto Capture ============
   useEffect(() => {
@@ -199,6 +348,10 @@ function App() {
       !isCountingDown
     )
       return;
+
+    if (countdown === Math.min(captureDelay, 3)) {
+      startRecording();
+    }
 
     if (countdown === 0) {
       setIsCountingDown(false);
@@ -218,6 +371,7 @@ function App() {
     isTimerPaused,
     isCountingDown,
     capturePhoto,
+    startRecording,
   ]);
 
   // ============ PREVIEW PAGE - 7 Menit Timer ============
@@ -256,6 +410,8 @@ function App() {
   const handleProceedToEmail = async ({
     croppedFiles = [],
     finalImage = null,
+    finalVideoTransition = null,
+    finalVideoLoop = null,
   } = {}) => {
     if (selectedPhotos.length !== maxPhotos) {
       setError(`Pilih tepat ${maxPhotos} foto!`);
@@ -265,11 +421,19 @@ function App() {
     try {
       console.log("Upload session files...");
 
-      await workflow.uploadSessionFiles(finalImage, capturedPhotos);
+      await workflow.uploadSessionFiles(
+        finalImage,
+        capturedPhotos,
+        livePhotos,
+        finalVideoTransition,
+        finalVideoLoop
+      );
       console.log("Upload selesai");
 
       setCroppedPhotos(croppedFiles);
       setFinalImage(finalImage);
+      setFinalVideoTransition(finalVideoTransition);
+      setFinalVideoLoop(finalVideoLoop);
 
       setCurrentPage("email");
     } catch (err) {
@@ -378,6 +542,7 @@ function App() {
           printOptions={workflow.printOptions || []}
           selectedPrintOption={selectedPrintOption}
           onSelect={setSelectedPrintOption}
+          booking={workflow.booking}
           onProceed={async () => {
             if (!selectedPrintOption) return;
             setError(null);
@@ -467,11 +632,19 @@ function App() {
           capturedPhotos={capturedPhotos}
           error={error || camera.error}
           onCapture={handleTriggerCountdown}
+          onRetake={handleRetakePhoto}
+          onKeep={handleKeepPhoto}
+          reviewCountdown={reviewCountdown}
+          captureDelay={captureDelay}
+          setCaptureDelay={setCaptureDelay}
           isFlashing={isFlashing}
           activePreviewPhoto={activePreviewPhoto}
           isCountingDown={isCountingDown}
           isTimerPaused={isTimerPaused}
           frames={workflow.frames || []}
+          cameraDevices={cameraDevices}
+          selectedDeviceId={selectedDeviceId}
+          onSelectCameraDevice={handleSelectCameraDevice}
         />
       );
 
@@ -482,6 +655,7 @@ function App() {
           formatTime={formatTime}
           selectedPhotos={selectedPhotos}
           capturedPhotos={capturedPhotos}
+          livePhotos={livePhotos}
           onSelectPhoto={handleSelectPhotoForPreview}
           onProceed={handleProceedToEmail}
           selectedFrame={selectedFrame}
@@ -507,16 +681,31 @@ function App() {
       return (
         <Done
           userEmail={userEmail}
+          finalVideoTransition={finalVideoTransition}
           onReset={() => {
             setBookingCode("");
             setUserEmail("");
             setCapturedPhotos([]);
             setSelectedPhotos([]);
             setCroppedPhotos([]);
+            setLivePhotos([]);
             setFinalImage(null);
             setPhotoIndex(0);
             setCurrentPage("welcome");
             workflow.reset();
+          }}
+        />
+      );
+
+    case "admin":
+      return (
+        <AdminSettings
+          onSave={(deviceId) => {
+            setSelectedDeviceId(deviceId);
+            setCurrentPage("welcome");
+          }}
+          onCancel={() => {
+            setCurrentPage("welcome");
           }}
         />
       );

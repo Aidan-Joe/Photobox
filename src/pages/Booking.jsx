@@ -76,7 +76,7 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, on
     <div className="booking-split-container">
       {/* Top Header Bar */}
       <div className="booking-header-bar">
-        <h2 className="booking-header-title">SnapBox Studio</h2>
+        <h2 className="booking-header-title">CuitBox</h2>
         <div style={{ display: 'flex', gap: '20px' }}>
           <button className="welcome-header-icon" title="Help">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="welcome-header-svg">
@@ -181,7 +181,7 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, on
           <span className="wifi-icon"></span>
           <span>Connected</span>
         </div>
-        <div>© 2026 PhotoBox. All rights reserved.</div>
+        <div>© 2026 CuitBox. All rights reserved.</div>
       </div>
     </div>
   );

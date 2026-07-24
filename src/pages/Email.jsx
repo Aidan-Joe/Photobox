@@ -2,6 +2,26 @@ import { useState, useEffect } from 'react';
 
 export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit, onBack, loading, error }) {
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
+  const [progress, setProgress] = useState(0);
+
+  // Simulated progress for email sending
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      setProgress(0);
+      interval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 98) return 98;
+          const remaining = 98 - prev;
+          const step = Math.max(1, Math.round(remaining * 0.12)); // slightly faster factor
+          return prev + step;
+        });
+      }, 150);
+    } else {
+      setProgress(0);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   // Timer countdown
   useEffect(() => {
@@ -39,9 +59,28 @@ export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit,
 
   return (
     <div className="email-page-container">
+      {/* Premium Glassmorphism Loading Overlay */}
+      {loading && (
+        <div className="processing-loading-overlay">
+          <div className="processing-loading-card">
+            <div className="processing-spinner-container">
+              <div className="processing-spinner"></div>
+              <div className="processing-percentage">{progress}%</div>
+            </div>
+            <h2 className="processing-title" style={{ color: '#ffffff', margin: '0 0 12px 0' }}>Mengirim Lembar Foto...</h2>
+            <div className="processing-progress-bar-container">
+              <div className="processing-progress-bar" style={{ width: `${progress}%` }}></div>
+            </div>
+            <p className="processing-description" style={{ color: '#94a3b8', fontSize: '14.5px', margin: 0, height: 'auto' }}>
+              Sila tunggu sebentar, foto dan video transisi sedang dikirim ke alamat email Anda.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top Header Bar */}
       <div className="booking-header-bar">
-        <h2 className="booking-header-title">SnapBox Studio</h2>
+        <h2 className="booking-header-title">CuitBox</h2>
         <div className="email-timer-capsule">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -117,38 +156,12 @@ export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit,
           ))}
         </div>
 
-        {/* Proceed & Back Buttons */}
-        <div className="email-actions-container" style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end', width: '100%', maxWidth: '840px' }}>
-          <button 
-            type="button"
-            onClick={onBack}
-            className="btn-kembali-email"
-            style={{
-              backgroundColor: '#ffffff',
-              color: '#0f172a',
-              fontSize: '18px',
-              fontWeight: '750',
-              padding: '16px 44px',
-              borderRadius: '50px',
-              border: '2px solid #e2e8f0',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            Kembali
-          </button>
-
+        {/* Proceed Button */}
+        <div className="email-actions-container" style={{ display: 'flex', justifyContent: 'center', width: '100%', maxWidth: '840px', marginTop: '24px' }}>
           <button 
             onClick={onSubmit} 
             className="btn-lanjut-email" 
-            disabled={loading || !userEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)}
+            disabled={loading}
           >
             {loading ? 'Mengirim...' : 'Lanjut'}
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -157,7 +170,7 @@ export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit,
             </svg>
           </button>
         </div>
-        {error && <p className="kiosk-error" style={{ marginTop: '12px', width: '100%', textAlign: 'right', maxWidth: '840px' }}>{error}</p>}
+        {error && <p className="kiosk-error" style={{ marginTop: '12px', width: '100%', textAlign: 'center', maxWidth: '840px' }}>{error}</p>}
       </div>
 
       {/* Footer bar */}
@@ -166,7 +179,7 @@ export default function Email({ userEmail, onInputEmail, setUserEmail, onSubmit,
           <span className="wifi-icon"></span>
           <span>Connected</span>
         </div>
-        <div>© 2026 PhotoBox. All rights reserved.</div>
+        <div>© 2026 CuitBox. All rights reserved.</div>
       </div>
     </div>
   );

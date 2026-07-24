@@ -10,7 +10,7 @@ export default function PrintOption({
     <div className="pkg-container">
       {/* Top Header Bar */}
       <div className="booking-header-bar">
-        <h2 className="booking-header-title">SnapBox Studio</h2>
+        <h2 className="booking-header-title">CuitBox</h2>
         <div style={{ display: 'flex', gap: '20px' }}>
           <button className="welcome-header-icon" title="Help">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="welcome-header-svg">
@@ -23,7 +23,7 @@ export default function PrintOption({
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="welcome-header-svg">
               <circle cx="12" cy="12" r="10" />
               <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z" />
             </svg>
           </button>
         </div>
@@ -37,56 +37,57 @@ export default function PrintOption({
         </div>
 
         {/* Package Selection Grid */}
-        {Array.isArray(printOptions) && printOptions.length > 0 ? (
-          <div className="pkg-grid">
-            {printOptions.map((opt) => {
-              const isSelected = selectedPrintOption === opt.id;
-              const quantity = opt.quantity || Number(opt.copies) || 2;
-              const name = opt.name || `${quantity} Cetak`;
-              const description = opt.description || `Mendapatkan ${quantity} lembar cetak foto strip fisik.`;
-              
-              // Format price: try total_amount, extra_price, or opt.price
-              let price = opt.price;
-              if (!price) {
-                const amount = opt.total_amount || opt.extra_price;
-                price = amount !== undefined ? `Rp ${Number(amount).toLocaleString('id-ID')}` : 'Rp 0';
-              }
+        <div className="pkg-grid">
+          {Array.isArray(printOptions) && printOptions.map((opt) => {
+            const isSelected = selectedPrintOption === opt.id;
+            const quantity = opt.quantity || Number(opt.copies) || 2;
+            const name = opt.name || `${quantity} Cetak`;
+            const description = opt.description || `Mendapatkan ${quantity} lembar cetak foto strip fisik.`;
+            
+            // Format price: try total_amount, extra_price, or opt.price
+            let price = opt.price;
+            if (!price) {
+              const amount = opt.total_amount || opt.extra_price;
+              price = amount !== undefined ? `Rp ${Number(amount).toLocaleString('id-ID')}` : 'Rp 0';
+            }
 
-              return (
-                <div
-                  key={opt.id}
-                  onClick={() => onSelect(opt.id)}
-                  className={`pkg-card ${isSelected ? 'selected' : ''}`}
-                >
-                  {/* Popular Badge */}
-                  {opt.isPopular && (
-                    <div className="pkg-badge-popular">MOST POPULAR</div>
-                  )}
+            return (
+              <div
+                key={opt.id}
+                onClick={() => onSelect(opt.id)}
+                className={`pkg-card ${isSelected ? 'selected' : ''}`}
+              >
+                {/* Popular Badge */}
+                {opt.isPopular && (
+                  <div className="pkg-badge-popular">MOST POPULAR</div>
+                )}
 
-                  {/* CSS Drawn Thumbnail */}
-                  <div className="pkg-thumb-container">
-                    {/* CSS Drawn Strips based on quantity */}
-                    {Array.from({ length: quantity }).map((_, i) => (
-                      <div 
-                        key={i} 
-                        className={`pkg-strip-graphic strip-${quantity}-${i + 1}`}
-                      >
-                        <div className="pkg-strip-frame"></div>
-                        <div className="pkg-strip-frame"></div>
-                        <div className="pkg-strip-frame"></div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <h3 className="pkg-card-title">{name}</h3>
-                  <p className="pkg-card-desc">{description}</p>
-                  <p className="pkg-card-price">{price}</p>
+                {/* CSS Drawn Thumbnail */}
+                <div className="pkg-thumb-container">
+                  {/* CSS Drawn Strips based on quantity */}
+                  {Array.from({ length: quantity }).map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={`pkg-strip-graphic strip-${quantity}-${i + 1}`}
+                    >
+                      <div className="pkg-strip-frame"></div>
+                      <div className="pkg-strip-frame"></div>
+                      <div className="pkg-strip-frame"></div>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p>Loading paket cetak...</p>
+
+                <h3 className="pkg-card-title">{name}</h3>
+                <p className="pkg-card-desc">{description}</p>
+                <p className="pkg-card-price">{price}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Dynamic loading fallback if printOptions empty */}
+        {(!printOptions || printOptions.length === 0) && (
+          <p style={{ marginTop: '20px' }}>Loading paket cetak...</p>
         )}
 
         {/* Bottom Errors */}
@@ -120,7 +121,7 @@ export default function PrintOption({
           <span className="wifi-icon"></span>
           <span>Connected</span>
         </div>
-        <div>© 2026 PhotoBox. All rights reserved.</div>
+        <div>© 2026 CuitBox. All rights reserved.</div>
       </div>
     </div>
   );

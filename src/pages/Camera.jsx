@@ -20,7 +20,28 @@ function PhotoThumbnail({ photo }) {
   return <img src={url} alt="Captured" className="camera-recent-shot-photo" />;
 }
 
-export default function Camera({ videoRef, photoIndex, countdown, selectedFrame, capturedPhotos = [], error, onCapture, isFlashing, activePreviewPhoto, isCountingDown, isTimerPaused, frames = [] }) {
+export default function Camera({
+  videoRef,
+  photoIndex,
+  countdown,
+  selectedFrame,
+  capturedPhotos = [],
+  error,
+  onCapture,
+  onRetake,
+  onKeep,
+  reviewCountdown,
+  captureDelay,
+  setCaptureDelay,
+  isFlashing,
+  activePreviewPhoto,
+  isCountingDown,
+  isTimerPaused,
+  frames = [],
+  cameraDevices = [],
+  selectedDeviceId = '',
+  onSelectCameraDevice
+}) {
   const [activePreviewUrl, setActivePreviewUrl] = useState('');
 
   useEffect(() => {
@@ -71,7 +92,7 @@ export default function Camera({ videoRef, photoIndex, countdown, selectedFrame,
     <div className="camera-page-container">
       {/* Top Header Bar */}
       <div className="booking-header-bar">
-        <h2 className="booking-header-title">SnapBox Studio</h2>
+        <h2 className="booking-header-title">CuitBox</h2>
         <div className="photo-counter-badge">
           Photo {Math.min(photoIndex + 1, 10)} / 10
         </div>
@@ -128,6 +149,18 @@ export default function Camera({ videoRef, photoIndex, countdown, selectedFrame,
 
           {/* Right Column - Camera stream with frame overlay */}
           <div className="camera-view-container">
+            {!isCountingDown && !isTimerPaused && (
+              <div className="camera-timer-outer-container">
+                <div className="camera-timer-pill" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="timer-icon">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748b', marginRight: '4px' }}>{captureDelay}s</span>
+                </div>
+              </div>
+            )}
+
             <div className="camera-video-wrapper">
               <video
                 ref={videoRef}
@@ -150,16 +183,20 @@ export default function Camera({ videoRef, photoIndex, countdown, selectedFrame,
 
               {/* White flash overlay */}
               {isFlashing && <div className="camera-flash-overlay" />}
-            </div>
 
-            <button
-              className="camera-shutter-btn"
-              onClick={onCapture}
-              disabled={photoIndex >= 10 || isCountingDown || isTimerPaused}
-            >
-              <span className="shutter-btn-dot" />
-              {isCountingDown ? 'Siap-siap...' : 'Ambil Foto'}
-            </button>
+              {/* Floating shutter button inside camera card */}
+              <button
+                className="camera-shutter-btn-round"
+                onClick={onCapture}
+                disabled={photoIndex >= 10 || isCountingDown || isTimerPaused}
+                title="Ambil Foto"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shutter-icon-svg">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -187,7 +224,7 @@ export default function Camera({ videoRef, photoIndex, countdown, selectedFrame,
           <span className="status-dot green-dot" />
           Camera Connected
         </div>
-        <div className="copyright-text">© 2026 PhotoBox. All rights reserved.</div>
+        <div className="copyright-text">© 2026 CuitBox. All rights reserved.</div>
       </div>
 
       {/* Instant Preview Overlay */}
@@ -196,6 +233,28 @@ export default function Camera({ videoRef, photoIndex, countdown, selectedFrame,
           <div className="camera-instant-preview-card">
             <div className="camera-instant-preview-badge">Nice Shot!</div>
             <img src={activePreviewUrl} alt="Instant Preview" className="camera-instant-preview-image" />
+            
+            {/* Review Decision Panel */}
+            <div className="preview-decision-panel">
+              <div className="preview-timer-text">
+                Simpan otomatis dalam <strong className="preview-countdown-sec">{reviewCountdown}s</strong>
+              </div>
+              <div className="preview-decision-buttons">
+                <button className="preview-btn-retake" onClick={onRetake}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                  </svg>
+                  Ambil Ulang
+                </button>
+                <button className="preview-btn-keep" onClick={onKeep}>
+                  Lanjut
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '6px' }}>
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -79,7 +79,7 @@ export default function FrameSelection({
     <div className="frame-selection-container">
       {/* Top Header Bar */}
       <div className="booking-header-bar">
-        <h2 className="booking-header-title">SnapBox Studio</h2>
+        <h2 className="booking-header-title">CuitBox</h2>
         <div className="frame-timer-capsule">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -127,7 +127,6 @@ export default function FrameSelection({
         <div className="frame-grid">
           {filteredFrames.map((frame) => {
             const isSelected = selectedFrame === frame.id;
-            const description = frame.description || "Premium Photo Frame";
             return (
               <div
                 key={frame.id}
@@ -154,8 +153,6 @@ export default function FrameSelection({
                     </div>
                   )}
                 </div>
-                <h3 className="frame-card-name">{frame.name}</h3>
-                <p className="frame-card-desc">{description}</p>
               </div>
             );
           })}
@@ -184,46 +181,6 @@ export default function FrameSelection({
           className="frame-actions-footer"
           style={{ display: "flex", gap: "12px", alignItems: "center" }}
         >
-          {import.meta.env.DEV && (
-            <button
-              className="btn-success-mock"
-              onClick={() => {
-                const defaultFrameId =
-                  frames && frames.length > 0 ? frames[0].id : 1;
-                onSelect(defaultFrameId);
-                onProceed(defaultFrameId);
-              }}
-              style={{
-                backgroundColor: "#10b981",
-                color: "white",
-                border: "none",
-                padding: "12px 24px",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                transition: "background-color 0.2s",
-                height: "46px",
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              [Dev Mode] Auto Select & Proceed
-            </button>
-          )}
           <button
             className="btn-lanjut"
             disabled={!selectedFrame}
@@ -259,7 +216,7 @@ export default function FrameSelection({
           <span className="wifi-icon"></span>
           <span>Connected</span>
         </div>
-        <div>© 2026 PhotoBox. All rights reserved.</div>
+        <div>© 2026 CuitBox. All rights reserved.</div>
       </div>
     </div>
   );

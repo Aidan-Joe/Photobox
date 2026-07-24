@@ -1,10 +1,47 @@
-import photostripChristmas from '../assets/photostrip_christmas.png';
-import polaroidCouple from '../assets/polaroid_couple.png';
-import photostripFriendsBlue from '../assets/photostrip_friends_blue.png';
+import y2kCyberBg from '../assets/y2k_cyber_bg.png';
 
 export default function Welcome({ onStart }) {
   return (
-    <div className="welcome-container">
+    <div className="welcome-container y2k-theme">
+      {/* Y2K Cyber Background Image Layer */}
+      <div
+        className="y2k-bg-image-layer"
+        style={{ backgroundImage: `url(${y2kCyberBg})` }}
+      />
+      <div className="y2k-bg-overlay" />
+
+      {/* Electric Lightning Bolts Overlay */}
+      <div className="y2k-lightning lightning-1">
+        <svg viewBox="0 0 100 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 0L20 90H55L15 200L85 85H45L75 0H50Z" fill="url(#lightningGrad1)" opacity="0.85" />
+          <defs>
+            <linearGradient id="lightningGrad1" x1="0" y1="0" x2="100" y2="200">
+              <stop offset="0%" stopColor="#38bdf8" />
+              <stop offset="50%" stopColor="#ec4899" />
+              <stop offset="100%" stopColor="#e2f952" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <div className="y2k-lightning lightning-2">
+        <svg viewBox="0 0 100 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M45 0L10 100H50L5 200L90 75H45L80 0H45Z" fill="url(#lightningGrad2)" opacity="0.8" />
+          <defs>
+            <linearGradient id="lightningGrad2" x1="100" y1="0" x2="0" y2="200">
+              <stop offset="0%" stopColor="#ec4899" />
+              <stop offset="50%" stopColor="#a855f7" />
+              <stop offset="100%" stopColor="#38bdf8" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      {/* Prismatic Orbs & Liquid Chrome Elements */}
+      <div className="y2k-orb orb-pink" />
+      <div className="y2k-orb orb-cyan" />
+      <div className="y2k-orb orb-lime" />
+
       {/* Top Header Icons */}
       <div className="welcome-header">
         <button className="welcome-header-icon" title="Help">
@@ -23,53 +60,30 @@ export default function Welcome({ onStart }) {
         </button>
       </div>
 
-      {/* Floating Polaroids */}
-      <div className="polaroid-card card-christmas">
-        <img 
-          src={photostripChristmas} 
-          alt="Christmas Photo Strip" 
-          className="polaroid-photo"
-          style={{ width: '130px', height: '280px' }}
-        />
-      </div>
-
-      <div className="polaroid-card card-couple">
-        <img 
-          src={polaroidCouple} 
-          alt="Couple Polaroid" 
-          className="polaroid-photo"
-          style={{ width: '160px', height: '160px' }}
-        />
-      </div>
-
-      <div className="polaroid-card card-friends">
-        <img 
-          src={photostripFriendsBlue} 
-          alt="Friends Photo Strip" 
-          className="polaroid-photo"
-          style={{ width: '130px', height: '280px' }}
-        />
-      </div>
-
-      {/* Center Content */}
+      {/* Center Content (without card background) */}
       <div className="welcome-content">
-        <h1 className="welcome-title">SnapBox Studio</h1>
-        <p className="welcome-subtitle">Touch to Start Your Aesthetic Journey</p>
-        <button 
-          className="welcome-btn"
-          onClick={onStart}
+        <h1 
+          className="welcome-title y2k-chrome-title" 
+          style={{ fontSize: '64px', maxWidth: '850px', textAlign: 'center', lineHeight: '1.15' }}
         >
-          Start Session
+          Touch to Start Your Aesthetic Journey
+        </h1>
+        <button
+          className="welcome-btn y2k-neon-btn"
+          onClick={onStart}
+          style={{ marginTop: '36px' }}
+        >
+          <span>Start Session</span>
         </button>
       </div>
 
       {/* Welcome Footer */}
-      <div className="welcome-footer">
+      <div className="welcome-footer y2k-footer">
         <div className="connection-status">
           <span className="wifi-icon"></span>
           <span>Connected</span>
         </div>
-        <div>© 2026 PhotoBox. All rights reserved.</div>
+        <div>© 2026 CuitBox. All rights reserved.</div>
       </div>
     </div>
   );

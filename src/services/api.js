@@ -114,31 +114,46 @@ export const sessionAPI = {
   startSession: (data) => apiClient.post(ENDPOINTS.SESSION_START, data),
   // data: { booking_id: number, frame_id: number, filter_id: number }
 
-  // Upload final photostrip + semua hasil capture
-  uploadSessionFiles: (sessionId, finalImage, capturedPhotos) => {
+  async uploadSessionFiles(
+    sessionId,
+    finalImage,
+    capturedPhotos,
+    livePhotos,
+    finalVideoTransition,
+    finalVideoLoop
+  ) {
     const formData = new FormData();
 
     // photostrip final
     formData.append("final_image", finalImage);
 
+    // compiled final video (transition)
+    if (finalVideoTransition) {
+      formData.append("final_video_transition", finalVideoTransition);
+    }
+
+    // compiled final video (loop)
+    if (finalVideoLoop) {
+      formData.append("final_video_loop", finalVideoLoop);
+    }
+
     // 10 hasil capture
-    capturedPhotos.forEach((photo) => {
-      formData.append("captured_photos[]", photo);
+    capturedPhotos.forEach((photo, index) => {
+      const file =
+        photo instanceof File
+          ? photo
+          : new File([photo], `capture_${index + 1}.jpg`, {
+              type: photo.type || "image/jpeg",
+            });
+      formData.append("captured_photos[]", file);
     });
 
-    return apiClient.uploadFile(
+    const result = await apiClient.uploadFile(
       ENDPOINTS.SESSION_UPLOAD.replace("{sessionId}", sessionId),
       formData,
     );
-    console.log("API");
 
-    console.log(finalImage);
-
-    console.log(capturedPhotos);
-
-    for (const pair of formData.entries()) {
-      console.log(pair[0], pair[1]);
-    }
+    return result;
   },
   // Send session result via email
   sendEmail: (sessionId, email) =>
