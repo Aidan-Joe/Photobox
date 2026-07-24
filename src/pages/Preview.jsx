@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { CONFIG } from "../config";
 
 import { cropPhoto } from "../utils/cropPhoto";
 import { detectHoles } from "../utils/detectHoles";
 import { renderFinalImage } from "../utils/renderFinalImage";
+import { renderFinalVideo } from "../utils/renderFinalVideo";
 
 function PreviewPhotoThumbnail({ photo }) {
   const [url, setUrl] = useState("");
@@ -56,16 +58,14 @@ function InteractivePhotoSlot({
 
   const t = transform || { scale: 1, x: 0, y: 0 };
 
-  const clampTransform = (x, y, scale) => {
-    if (!containerRef.current) return { x, y, scale };
-    const slotWidth = containerRef.current.clientWidth;
-    const slotHeight = containerRef.current.clientHeight;
+  const slotWidth = containerRef.current ? containerRef.current.clientWidth : 0;
+  const slotHeight = containerRef.current ? containerRef.current.clientHeight : 0;
 
-    // Calculate rendered size under object-fit: cover
-    const rs = slotWidth / slotHeight;
-    const ri = imgSize.w / imgSize.h;
+  const rs = (slotWidth && slotHeight) ? slotWidth / slotHeight : 1;
+  const ri = (imgSize.w && imgSize.h) ? imgSize.w / imgSize.h : 1;
 
-    let rw, rh;
+  let rw = slotWidth, rh = slotHeight;
+  if (slotWidth && slotHeight) {
     if (ri > rs) {
       rw = slotHeight * ri;
       rh = slotHeight;
@@ -73,19 +73,44 @@ function InteractivePhotoSlot({
       rw = slotWidth;
       rh = slotWidth / ri;
     }
+  }
 
-    const zw = rw * scale;
-    const zh = rh * scale;
+  const leftOffset = (slotWidth - rw) / 2;
+  const topOffset = (slotHeight - rh) / 2;
 
-    const maxX = Math.max(0, (zw - slotWidth) / 2);
+  const clampTransform = (x, y, scale) => {
+    if (!containerRef.current) return { x: 0, y: 0, scale: 1 };
+    const slotW = containerRef.current.clientWidth;
+    const slotH = containerRef.current.clientHeight;
+
+    // Skala minimal 1.0 agar foto tidak pernah mengecil lebih kecil dari slot
+    const safeScale = Math.min(Math.max(scale || 1, 1), 4);
+
+    const rRatio = slotW / (slotH || 1);
+    const iRatio = (imgSize.w || 1) / (imgSize.h || 1);
+
+    let baseW, baseH;
+    if (iRatio > rRatio) {
+      baseW = slotH * iRatio;
+      baseH = slotH;
+    } else {
+      baseW = slotW;
+      baseH = slotW / iRatio;
+    }
+
+    const zw = baseW * safeScale;
+    const zh = baseH * safeScale;
+
+    // Batasi geser kanan/kiri (X) dan atas/bawah (Y) agar foto tidak pernah melewati tepi slot
+    const maxX = Math.max(0, (zw - slotW) / 2);
     const minX = -maxX;
-    const maxY = Math.max(0, (zh - slotHeight) / 2);
+    const maxY = Math.max(0, (zh - slotH) / 2);
     const minY = -maxY;
 
     return {
-      scale,
-      x: Math.min(Math.max(x, minX), maxX),
-      y: Math.min(Math.max(y, minY), maxY),
+      scale: safeScale,
+      x: Math.min(Math.max(x || 0, minX), maxX),
+      y: Math.min(Math.max(y || 0, minY), maxY),
     };
   };
 
@@ -94,6 +119,15 @@ function InteractivePhotoSlot({
     const clamped = clampTransform(nextT.x, nextT.y, nextT.scale);
     onTransformChange(slotIndex, clamped);
   };
+
+  useEffect(() => {
+    if (imgSize.w && imgSize.h && containerRef.current) {
+      const clamped = clampTransform(t.x, t.y, t.scale);
+      if (clamped.x !== t.x || clamped.y !== t.y || clamped.scale !== t.scale) {
+        onTransformChange(slotIndex, clamped);
+      }
+    }
+  }, [imgSize.w, imgSize.h, slotWidth, slotHeight]);
 
   const getTouchDistance = (e) => {
     if (e.touches.length < 2) return null;
@@ -204,13 +238,11 @@ function InteractivePhotoSlot({
         }
         style={{
           position: "absolute",
-          left: 0,
-          top: 0,
-
-          width: "100%",
-          height: "100%",
-
-          objectFit: "cover",
+          left: `${leftOffset}px`,
+          top: `${topOffset}px`,
+          width: rw ? `${rw}px` : "100%",
+          height: rh ? `${rh}px` : "100%",
+          objectFit: "fill",
 
           transform: `translate(${t.x}px, ${t.y}px) scale(${t.scale})`,
           transformOrigin: "center center",
@@ -232,6 +264,7 @@ export default function Preview({
   formatTime,
   selectedPhotos,
   capturedPhotos,
+  livePhotos = [],
   onSelectPhoto,
   onProceed,
   selectedFrame,
@@ -240,6 +273,7 @@ export default function Preview({
 }) {
   const [transforms, setTransforms] = useState({});
   const [isCropping, setIsCropping] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
   const [frameRatio, setFrameRatio] = useState(null);
   const [detectedHoles, setDetectedHoles] = useState([]);
   const [frameSize, setFrameSize] = useState({
@@ -251,13 +285,19 @@ export default function Preview({
     (f) => String(f.id) === String(selectedFrame),
   );
   const frameUrl = currentFrame?.file_path
-    ? `http://localhost:8080/api/frame/${currentFrame.file_path.split("/").pop()}`
+    ? (currentFrame.file_path.startsWith("http")
+        ? currentFrame.file_path
+        : `${CONFIG.API_URL}/frame/${currentFrame.file_path.split("/").pop()}`)
     : null;
   const totalNeeded = currentFrame
-    ? parseInt(currentFrame.photo_count, 10) || 6
+    ? parseInt(currentFrame.layout_photo_count || currentFrame.photo_count, 10) || 6
     : 6;
 
   useEffect(() => {
+    console.log("DEBUG PREVIEW - selectedFrame:", selectedFrame);
+    console.log("DEBUG PREVIEW - frames array:", frames);
+    console.log("DEBUG PREVIEW - currentFrame:", currentFrame);
+
     if (!currentFrame?.file_path) {
       setFrameRatio(null);
 
@@ -286,6 +326,32 @@ export default function Preview({
         height: img.naturalHeight,
       });
 
+      // Gunakan koordinat layout dari database jika tersedia (skala dari basis desain 1200x1800 ke ukuran asli frame)
+      let rawCoords = currentFrame.layout_slot_coordinates;
+
+      if (rawCoords) {
+        try {
+          const coords = typeof rawCoords === "string"
+            ? JSON.parse(rawCoords)
+            : rawCoords;
+
+          if (Array.isArray(coords) && coords.length > 0) {
+            console.log("DEBUG PREVIEW - Raw layout coordinates:", coords);
+            const mappedHoles = coords.map((c) => ({
+              left: Number(c.x) * (img.naturalWidth / 1200),
+              top: Number(c.y) * (img.naturalHeight / 1800),
+              width: Number(c.w) * (img.naturalWidth / 1200),
+              height: Number(c.h) * (img.naturalHeight / 1800),
+            }));
+            console.log("DEBUG PREVIEW - Mapped database holes:", mappedHoles);
+            setDetectedHoles(mappedHoles);
+            return;
+          }
+        } catch (e) {
+          console.error("Gagal parse layout_slot_coordinates, fallback ke detectHoles:", e);
+        }
+      }
+
       const holes = detectHoles(img, img.naturalWidth, img.naturalHeight);
       console.log("FRAME WIDTH", img.naturalWidth);
       console.log("FRAME HEIGHT", img.naturalHeight);
@@ -311,10 +377,13 @@ export default function Preview({
 
   const handleProceed = async () => {
     setIsCropping(true);
+    setProcessingProgress(0);
 
     try {
       const croppedFiles = [];
       let finalImage = null;
+      let finalVideoTransition = null;
+      let finalVideoLoop = null;
 
       const slotElements = document.querySelectorAll(
         ".preview-sheet-mockup .grid-slot",
@@ -336,12 +405,6 @@ export default function Preview({
           x: 0,
           y: 0,
         };
-        const hole = detectedHoles[idx] ?? {
-          left: 0,
-          top: 0,
-          width: slotWidth,
-          height: slotHeight,
-        };
         const cropped = await cropPhoto(
           photoFile,
           transform,
@@ -350,14 +413,18 @@ export default function Preview({
         );
 
         croppedFiles.push(cropped);
+        setProcessingProgress(Math.round(((idx + 1) / totalNeeded) * 10));
       }
 
       // Frame URL
       const frameUrl = currentFrame?.file_path
-        ? `http://localhost:8080/api/frame/${currentFrame.file_path.split("/").pop()}`
+        ? (currentFrame.file_path.startsWith("http")
+            ? currentFrame.file_path
+            : `${CONFIG.API_URL}/frame/${currentFrame.file_path.split("/").pop()}`)
         : null;
 
       if (frameUrl && detectedHoles.length > 0 && croppedFiles.length > 0) {
+        setProcessingProgress(12);
         finalImage = await renderFinalImage({
           frameUrl,
           croppedPhotos: croppedFiles,
@@ -368,21 +435,79 @@ export default function Preview({
         if (!finalImage) {
           throw new Error("Final image gagal dibuat.");
         }
+        setProcessingProgress(15);
         console.log("FINAL IMAGE", finalImage);
         console.log("SIZE", finalImage.size);
 
-        //const previewUrl = URL.createObjectURL(finalImage);
+        // Get selected live photos and slot sizes
+        const selectedLivePhotos = [];
+        const slotWidths = [];
+        const slotHeights = [];
+        for (let idx = 0; idx < totalNeeded; idx++) {
+          const photoIdx = selectedPhotos[idx];
+          selectedLivePhotos.push(livePhotos[photoIdx]);
 
-        //window.open(previewUrl);
+          const slotEl = slotElements[idx];
+          slotWidths.push(slotEl ? slotEl.clientWidth : 146);
+          slotHeights.push(slotEl ? slotEl.clientHeight : 113);
+        }
+
+        // Render transition video
+        console.log("Rendering transition video...");
+        try {
+          finalVideoTransition = await renderFinalVideo({
+            frameUrl,
+            croppedPhotos: croppedFiles,
+            livePhotos: selectedLivePhotos,
+            holes: detectedHoles,
+            width: frameSize.width,
+            height: frameSize.height,
+            transforms,
+            slotWidths,
+            slotHeights,
+            mode: "transition",
+            onProgress: (p) => {
+              setProcessingProgress(15 + Math.round(p * 0.6)); // Maps 0-100 to 15-75
+            }
+          });
+        } catch (e) {
+          console.error("Gagal membuat video transisi:", e);
+        }
+
+        // Render loop video
+        console.log("Rendering loop video...");
+        try {
+          finalVideoLoop = await renderFinalVideo({
+            frameUrl,
+            croppedPhotos: croppedFiles,
+            livePhotos: selectedLivePhotos,
+            holes: detectedHoles,
+            width: frameSize.width,
+            height: frameSize.height,
+            transforms,
+            slotWidths,
+            slotHeights,
+            mode: "loop",
+            onProgress: (p) => {
+              setProcessingProgress(75 + Math.round(p * 0.2)); // Maps 0-100 to 75-95
+            }
+          });
+        } catch (e) {
+          console.error("Gagal membuat video loop:", e);
+        }
       }
+      setProcessingProgress(98);
       console.log("========= PREVIEW =========");
       console.log("croppedFiles", croppedFiles);
       console.log("jumlah", croppedFiles.length);
       console.log("finalImage", finalImage);
+      console.log("finalVideoTransition", finalVideoTransition);
+      console.log("finalVideoLoop", finalVideoLoop);
       console.log("===========================");
-      await onProceed({ croppedFiles, finalImage });
+      setProcessingProgress(100);
+      await onProceed({ croppedFiles, finalImage, finalVideoTransition, finalVideoLoop });
     } catch (err) {
-      console.error("Failed creating final image:", err);
+      console.error("Failed creating assets:", err);
     } finally {
       setIsCropping(false);
     }
@@ -433,9 +558,32 @@ export default function Preview({
 
   return (
     <div className="preview-page-container">
+      {/* Premium Glassmorphism Loading Overlay */}
+      {isCropping && (
+        <div className="processing-loading-overlay">
+          <div className="processing-loading-card">
+            <div className="processing-spinner-container">
+              <div className="processing-spinner"></div>
+              <div className="processing-percentage">{processingProgress}%</div>
+            </div>
+            <h2 className="processing-title">Rendering Your Memories...</h2>
+            <div className="processing-progress-bar-container">
+              <div className="processing-progress-bar" style={{ width: `${processingProgress}%` }}></div>
+            </div>
+            <p className="processing-description">
+              {processingProgress < 12 && "Menyusun dan memotong foto..."}
+              {processingProgress >= 12 && processingProgress < 15 && "Membuat gambar cetakan final..."}
+              {processingProgress >= 15 && processingProgress < 75 && "Merender video transisi (Live Photo)..."}
+              {processingProgress >= 75 && processingProgress < 98 && "Merender video loop... hampir selesai!"}
+              {processingProgress >= 98 && "Menyelesaikan dokumen digital..."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top Header Bar */}
       <div className="booking-header-bar">
-        <h2 className="booking-header-title">SnapBox Studio</h2>
+        <h2 className="booking-header-title">CuitBox</h2>
         <div className="email-timer-capsule">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -453,6 +601,14 @@ export default function Preview({
           </svg>
           <span>{formatTime(previewTimer)}</span>
         </div>
+      </div>
+
+      {/* Top Center Title & Subtitle */}
+      <div className="preview-header-center" style={{ textAlign: "center", marginBottom: "20px" }}>
+        <h1 className="preview-main-title" style={{ textAlign: "center" }}>Choose Your Favorite Shots</h1>
+        <p className="preview-main-subtitle" style={{ textAlign: "center", margin: "0" }}>
+          Pilih momen-momen terbaik untuk dicetak dan disimpan selamanya.
+        </p>
       </div>
 
       {/* Main Two-Column Layout */}
@@ -537,14 +693,9 @@ export default function Preview({
           </div>
         </div>
 
-        {/* Right Column: Title, Subtitle, Grid, Timer and Shutter/Proceed button */}
+        {/* Right Column: Grid, Timer and Shutter/Proceed button */}
         <div className="preview-right-column">
           <div className="preview-control-panel">
-            <h1 className="preview-main-title">Choose Your Favorite Shots</h1>
-            <p className="preview-main-subtitle">
-              Pilih momen-momen terbaik untuk dicetak dan disimpan selamanya.
-            </p>
-
             <div
               className="preview-timer-container"
               style={{ justifyContent: "flex-end" }}
@@ -599,7 +750,7 @@ export default function Preview({
           <span className="wifi-icon"></span>
           <span>Connected</span>
         </div>
-        <div>© 2026 PhotoBox. All rights reserved.</div>
+        <div>© 2026 CuitBox. All rights reserved.</div>
       </div>
     </div>
   );

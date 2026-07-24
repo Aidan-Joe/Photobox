@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 
 /**
  * Custom hook untuk camera access
@@ -22,20 +22,26 @@ export function useCamera() {
   });
 
   // Start camera
-  const startCamera = useCallback(async (facingMode = 'user') => {
+  const startCamera = useCallback(async (deviceIdOrFacingMode = 'user') => {
     setError(null);
-    console.log('[Camera] startCamera called. facingMode:', facingMode);
+    console.log('[Camera] startCamera called. parameter:', deviceIdOrFacingMode);
     try {
       let mediaStream;
       try {
         const constraints = {
           video: {
-            facingMode: facingMode, // 'user' atau 'environment'
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
           audio: false,
         };
+
+        if (deviceIdOrFacingMode && deviceIdOrFacingMode.length > 25) {
+          constraints.video.deviceId = { exact: deviceIdOrFacingMode };
+        } else {
+          constraints.video.facingMode = deviceIdOrFacingMode || 'user';
+        }
+
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (firstErr) {
         console.warn('[Camera] Failed with ideal constraints, trying fallback without facingMode:', firstErr);
@@ -289,7 +295,7 @@ export function useCamera() {
     }
   }, []);
 
-  return {
+  return useMemo(() => ({
     // Refs
     videoRef,
     canvasRef,
@@ -306,5 +312,5 @@ export function useCamera() {
     switchCamera,
     takeMultiplePhotos,
     getCameraList,
-  };
+  }), [stream, error, isActive, startCamera, stopCamera, takePhoto, switchCamera, takeMultiplePhotos, getCameraList]);
 }

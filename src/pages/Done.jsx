@@ -1,3 +1,5 @@
+// Success page after uploading photos
+
 export default function Done({ userEmail, onReset }) {
   return (
     <div className="done-page-container">
@@ -11,8 +13,8 @@ export default function Done({ userEmail, onReset }) {
         <p className="done-text-note">
           Hasil foto akan dikirim dalam beberapa menit. Silakan cek folder inbox atau spam Anda.
         </p>
-        <button onClick={onReset} className="done-home-btn">
-          🏠 Kembali ke Awal
+        <button onClick={onReset} className="done-home-btn" style={{ margin: '0 auto' }}>
+          Kembali ke Awal
         </button>
       </div>
     </div>

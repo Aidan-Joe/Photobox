@@ -19,6 +19,7 @@ export const ENDPOINTS = {
   // Session
   SESSION_START: "/session/start",
   SESSION_UPLOAD: "/session/{sessionId}/upload",
+  SESSION_UPLOAD_LIVE: "/session/{sessionId}/upload-live",
   SESSION_EMAIL: "/session/{sessionId}/email",
   SESSION_COMPLETE: "/session/{sessionId}/complete",
 };

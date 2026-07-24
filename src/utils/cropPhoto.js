@@ -60,9 +60,23 @@ export async function cropPhoto(
 
       const scaleFactor = targetWidth / slotWidth;
 
-      const userScale = transform?.scale ?? 1;
-      const userX = (transform?.x ?? 0) * scaleFactor;
-      const userY = (transform?.y ?? 0) * scaleFactor;
+      const userScale = Math.min(Math.max(transform?.scale ?? 1, 1), 4);
+
+      // Hitung batas maksimum pergeseran X dan Y pada target canvas resolusi tinggi
+      const renderW = imageRatio > renderRatio ? targetHeight * imageRatio : targetWidth;
+      const renderH = imageRatio > renderRatio ? targetHeight : targetWidth / imageRatio;
+
+      const zw = renderW * userScale;
+      const zh = renderH * userScale;
+
+      const maxUserX = Math.max(0, (zw - targetWidth) / 2);
+      const maxUserY = Math.max(0, (zh - targetHeight) / 2);
+
+      const rawUserX = (transform?.x ?? 0) * scaleFactor;
+      const rawUserY = (transform?.y ?? 0) * scaleFactor;
+
+      const userX = Math.min(Math.max(rawUserX, -maxUserX), maxUserX);
+      const userY = Math.min(Math.max(rawUserY, -maxUserY), maxUserY);
 
       ctx.save();
 

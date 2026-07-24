@@ -5,6 +5,7 @@ export function usePhotoboxWorkflow() {
   const [state, setState] = useState({
     step: "idle",
     bookingId: null,
+    booking: null,
     paymentId: null,
     sessionId: null,
     printOptions: [],
@@ -55,6 +56,7 @@ export function usePhotoboxWorkflow() {
         ...prev,
         step: "verified",
         bookingId,
+        booking: bookingResult.booking,
         printOptions,
         frames,
         categories,
@@ -221,7 +223,13 @@ export function usePhotoboxWorkflow() {
   };
 
   // STEP 5 - UPLOAD PHOTOS
-  const uploadSessionFiles = async (finalImage, capturedPhotos) => {
+  const uploadSessionFiles = async (
+    finalImage,
+    capturedPhotos,
+    livePhotos,
+    finalVideoTransition,
+    finalVideoLoop
+  ) => {
     setState((prev) => ({
       ...prev,
       step: "uploading",
@@ -234,6 +242,9 @@ export function usePhotoboxWorkflow() {
         state.sessionId,
         finalImage,
         capturedPhotos,
+        livePhotos,
+        finalVideoTransition,
+        finalVideoLoop
       );
 
       setState((prev) => ({
@@ -261,7 +272,28 @@ export function usePhotoboxWorkflow() {
 
   // STEP 6 - SAVE EMAIL
   const sendSessionEmail = async (email) => {
-    return await sessionAPI.sendEmail(state.sessionId, email);
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
+    try {
+      const result = await sessionAPI.sendEmail(state.sessionId, email);
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+      }));
+      return result;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        step: "error",
+        error: error.message,
+        loading: false,
+      }));
+      throw error;
+    }
   };
 
   // STEP 7 - COMPLETE SESSION
@@ -298,6 +330,7 @@ export function usePhotoboxWorkflow() {
     setState({
       step: "idle",
       bookingId: null,
+      booking: null,
       paymentId: null,
       sessionId: null,
       printOptions: [],
