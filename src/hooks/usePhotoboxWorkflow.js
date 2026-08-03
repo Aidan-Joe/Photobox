@@ -29,9 +29,12 @@ export function usePhotoboxWorkflow() {
     try {
       console.log("🔍 Verifying booking:", bookingCodeOrQR);
 
-      const bookingResult = await bookingAPI.verifyBooking({
-        booking_code: bookingCodeOrQR,
-      });
+      // Run API requests in parallel to eliminate waterfall delay
+      const [bookingResult, printOptionsResult, framesResult] = await Promise.all([
+        bookingAPI.verifyBooking({ booking_code: bookingCodeOrQR }),
+        bookingAPI.getPrintOptions(bookingCodeOrQR),
+        bookingAPI.getFrames()
+      ]);
 
       const bookingId = bookingResult.booking?.id;
 
@@ -39,17 +42,9 @@ export function usePhotoboxWorkflow() {
         throw new Error("Booking tidak ditemukan");
       }
 
-      const printOptionsResult =
-        await bookingAPI.getPrintOptions(bookingCodeOrQR);
-
-      const framesResult = await bookingAPI.getFrames();
-
       const printOptions = printOptionsResult.print_options || [];
-
       const frames = framesResult.frames || [];
-
       const categories = framesResult.categories || [];
-
       const filters = framesResult.filters || [];
 
       setState((prev) => ({
@@ -100,7 +95,11 @@ export function usePhotoboxWorkflow() {
         throw new Error("Gagal membuat walk-in booking.");
       }
 
-      return await verifyBooking(bookingCode);
+      const verifyResult = await verifyBooking(bookingCode);
+      return {
+        bookingCode,
+        ...verifyResult
+      };
     } catch (error) {
       console.error(error);
       setState((prev) => ({

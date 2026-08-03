@@ -156,7 +156,24 @@ export default function Camera({
                     <circle cx="12" cy="12" r="10"/>
                     <polyline points="12 6 12 12 16 14"/>
                   </svg>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748b', marginRight: '4px' }}>{captureDelay}s</span>
+                  <select
+                    value={captureDelay}
+                    onChange={(e) => setCaptureDelay(Number(e.target.value))}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      color: '#64748b',
+                      cursor: 'pointer',
+                      outline: 'none',
+                      padding: 0
+                    }}
+                  >
+                    <option value={3}>3s</option>
+                    <option value={5}>5s</option>
+                    <option value={10}>10s</option>
+                  </select>
                 </div>
               </div>
             )}
@@ -188,7 +205,7 @@ export default function Camera({
               <button
                 className="camera-shutter-btn-round"
                 onClick={onCapture}
-                disabled={photoIndex >= 10 || isCountingDown || isTimerPaused}
+                disabled={photoIndex >= 10 || isTimerPaused}
                 title="Ambil Foto"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shutter-icon-svg">
@@ -197,6 +214,46 @@ export default function Camera({
                 </svg>
               </button>
             </div>
+
+            {/* Camera Source Selector */}
+            {cameraDevices.length > 0 && (
+              <div className="camera-source-selector-container" style={{
+                marginTop: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                background: '#ffffff',
+                padding: '8px 16px',
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                border: '1px solid #e2e8f0',
+                zIndex: 10
+              }}>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748b' }}>Sumber Kamera:</span>
+                <select
+                  value={selectedDeviceId}
+                  onChange={(e) => onSelectCameraDevice(e.target.value)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#1e293b',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    minWidth: '220px'
+                  }}
+                >
+                  {cameraDevices.map((device, idx) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || `Camera ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 

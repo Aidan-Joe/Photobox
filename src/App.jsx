@@ -151,10 +151,11 @@ function App() {
       setLivePhotos([]); // Reset secret live photos
 
       // Start camera
-      await startCamera("user");
+      await startCamera(selectedDeviceId || "user");
 
-      setCountdown(0);
-      setIsCountingDown(false);
+      // Auto start first countdown
+      setCountdown(captureDelay);
+      setIsCountingDown(true);
     } catch (err) {
       setError(err.message);
     }
@@ -164,12 +165,18 @@ function App() {
     if (
       photoIndex >= 10 ||
       isTimerPaused ||
-      isCapturingRef.current ||
-      isCountingDown
+      isCapturingRef.current
     )
       return;
-    setIsCountingDown(true);
-    setCountdown(captureDelay);
+    
+    if (isCountingDown) {
+      // If already counting down, trigger capture immediately
+      setIsCountingDown(false);
+      capturePhoto();
+    } else {
+      setIsCountingDown(true);
+      setCountdown(captureDelay);
+    }
   };
 
   const handleKeepPhoto = useCallback(() => {
@@ -183,10 +190,10 @@ function App() {
       setCurrentPage("preview");
       setPreviewTimer(420); // Reset 7 menit timer
     } else {
-      setCountdown(0);
-      setIsCountingDown(false);
+      setCountdown(captureDelay);
+      setIsCountingDown(true);
     }
-  }, [photoIndex, stopCamera]);
+  }, [photoIndex, stopCamera, captureDelay]);
 
   // Start secret live photo video recording
   const startRecording = useCallback(() => {
@@ -247,13 +254,53 @@ function App() {
     }
 
     isCapturingRef.current = true;
+    setError(null);
 
     // Trigger flash effect
     setIsFlashing(true);
     setTimeout(() => setIsFlashing(false), 150);
 
     try {
-      const photo = await takePhoto();
+      let photo;
+      try {
+        // Set a 4-second timeout for DSLR capture trigger
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        // Pemicu Shutter DSLR Fisik melalui API Backend
+        const response = await fetch(`${CONFIG.API_URL}/session/${workflow.sessionId}/capture-dslr`, {
+          method: "POST",
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.messages?.error || errData.message || `Gagal memicu DSLR (${response.status})`);
+        }
+
+        const result = await response.json();
+        if (!result.status || !result.data?.image_url) {
+          throw new Error(result.message || "Gagal menjepret gambar.");
+        }
+
+        // Download file resolusi tinggi dari backend sebagai Blob with 3-second timeout
+        const downloadController = new AbortController();
+        const downloadTimeoutId = setTimeout(() => downloadController.abort(), 3000);
+
+        const imgRes = await fetch(result.data.image_url, {
+          signal: downloadController.signal
+        });
+        
+        clearTimeout(downloadTimeoutId);
+        photo = await imgRes.blob();
+      } catch (dslrErr) {
+        console.warn("DSLR capture failed or timed out, falling back to webcam/web browser camera:", dslrErr);
+        // Fallback to webcam photo
+        photo = await takePhoto();
+      }
+
       if (photo) {
         setCapturedPhotos((prev) => [...prev, photo]);
         setActivePreviewPhoto(photo);
@@ -269,9 +316,10 @@ function App() {
       }
     } catch (err) {
       console.error("Capture error:", err);
+      setError(err.message || "Gagal mengambil foto.");
       isCapturingRef.current = false;
     }
-  }, [takePhoto, photoIndex, isTimerPaused]);
+  }, [photoIndex, isTimerPaused, workflow.sessionId, takePhoto]);
 
   const handleRetakePhoto = useCallback(() => {
     if (capturedPhotos.length === 0) return;
@@ -284,9 +332,9 @@ function App() {
     setCapturedPhotos((prev) => prev.slice(0, -1));
     setLivePhotos((prev) => prev.slice(0, -1)); // Discard corresponding secret video
     setPhotoIndex((prev) => Math.max(0, prev - 1));
-    setCountdown(0);
-    setIsCountingDown(false);
-  }, [capturedPhotos]);
+    setCountdown(captureDelay);
+    setIsCountingDown(true);
+  }, [capturedPhotos, captureDelay]);
 
   // Load and switch camera devices
   useEffect(() => {
@@ -501,7 +549,10 @@ function App() {
             } else if (option === "walkin") {
               setError(null);
               try {
-                await workflow.createWalkinBooking();
+                const result = await workflow.createWalkinBooking();
+                if (result?.bookingCode) {
+                  setBookingCode(result.bookingCode);
+                }
                 setCurrentPage("printOption");
               } catch (err) {
                 setError(err.message);

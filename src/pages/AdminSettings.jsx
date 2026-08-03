@@ -9,7 +9,17 @@ export default function AdminSettings({ onSave, onCancel }) {
 
   // Fetch camera list
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices()
+    // Request permission first to unlock device labels (e.g. DigiCamControl Virtual Camera)
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then((tempStream) => {
+        // Immediately stop the track so we don't lock the camera resource
+        tempStream.getTracks().forEach(track => track.stop());
+        return navigator.mediaDevices.enumerateDevices();
+      })
+      .catch(() => {
+        // Fallback to direct enumeration if permission is denied/fails
+        return navigator.mediaDevices.enumerateDevices();
+      })
       .then((allDevices) => {
         const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
         setDevices(videoDevices);
