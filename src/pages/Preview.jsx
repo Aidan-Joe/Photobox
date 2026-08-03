@@ -289,9 +289,10 @@ export default function Preview({
         ? currentFrame.file_path
         : `${CONFIG.API_URL}/frame/${currentFrame.file_path.split("/").pop()}`)
     : null;
-  const totalNeeded = currentFrame
+  const fallbackNeeded = currentFrame
     ? parseInt(currentFrame.layout_photo_count || currentFrame.photo_count, 10) || 6
     : 6;
+  const totalNeeded = detectedHoles.length > 0 ? detectedHoles.length : fallbackNeeded;
 
   useEffect(() => {
     console.log("DEBUG PREVIEW - selectedFrame:", selectedFrame);
@@ -713,7 +714,7 @@ export default function Preview({
                 return (
                   <div
                     key={idx}
-                    onClick={() => onSelectPhoto(idx)}
+                    onClick={() => onSelectPhoto(idx, totalNeeded)}
                     className={`preview-gallery-item ${isSelected ? "selected" : ""}`}
                   >
                     <PreviewPhotoThumbnail photo={photo} />

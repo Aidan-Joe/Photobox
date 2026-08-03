@@ -96,7 +96,7 @@ function App() {
     setError(null);
     try {
       await workflow.verifyBooking(bookingCode);
-      setCurrentPage("printOption");
+      setCurrentPage("frame");
     } catch (err) {
       setError(err.message);
     }
@@ -392,13 +392,13 @@ function App() {
     }
   }, [previewTimer, currentPage]);
 
-  const handleSelectPhotoForPreview = (photoIndex) => {
+  const handleSelectPhotoForPreview = (photoIndex, limit = 6) => {
     setSelectedPhotos((prev) => {
       if (prev.includes(photoIndex)) {
         return prev.filter((i) => i !== photoIndex);
       }
-      if (prev.length >= maxPhotos) {
-        if (maxPhotos === 1) {
+      if (prev.length >= limit) {
+        if (limit === 1) {
           return [photoIndex];
         }
         return [...prev.slice(1), photoIndex];
@@ -413,10 +413,6 @@ function App() {
     finalVideoTransition = null,
     finalVideoLoop = null,
   } = {}) => {
-    if (selectedPhotos.length !== maxPhotos) {
-      setError(`Pilih tepat ${maxPhotos} foto!`);
-      return;
-    }
 
     try {
       console.log("Upload session files...");
@@ -537,20 +533,23 @@ function App() {
       );
 
     case "printOption":
+      const activeOptions = workflow.printOptions || [];
+      const currentSelectedOption = selectedPrintOption || (activeOptions[0]?.id || "1");
       return (
         <PrintOption
-          printOptions={workflow.printOptions || []}
-          selectedPrintOption={selectedPrintOption}
+          printOptions={activeOptions}
+          selectedPrintOption={currentSelectedOption}
           onSelect={setSelectedPrintOption}
           booking={workflow.booking}
           onProceed={async () => {
-            if (!selectedPrintOption) return;
+            const optionToUse = selectedPrintOption || currentSelectedOption;
+            if (!optionToUse) return;
             setError(null);
             try {
-              const result =
-                await workflow.generatePaymentQR(selectedPrintOption);
+              setSelectedPrintOption(optionToUse);
+              const result = await workflow.generatePaymentQR(optionToUse);
               setPaymentQrCode(
-                result.midtrans?.qr_string || result.qrCode || "",
+                result.qrCode || result.midtrans?.qr_url || result.midtrans?.qr_string || "",
               );
               setCurrentPage("payment");
             } catch (err) {
@@ -565,9 +564,17 @@ function App() {
       );
 
     case "payment":
-      const selectedPkg =
-        workflow.printOptions &&
-        workflow.printOptions.find((opt) => opt.id === selectedPrintOption);
+      const activeOptionsList = workflow.printOptions || [];
+      const currentOptId = selectedPrintOption || "1";
+      const selectedPkg = activeOptionsList.find(
+        (opt) => String(opt.id) === String(currentOptId)
+      ) || {
+        id: currentOptId,
+        name: currentOptId === "1" ? "2 Cetak" : `${currentOptId} Cetak`,
+        copies: Number(currentOptId) || 2,
+        extra_price: currentOptId === "1" ? 25000 : 55000,
+      };
+
       return (
         <Payment
           bookingId={workflow.bookingId}

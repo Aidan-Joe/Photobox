@@ -15,13 +15,28 @@ export default function Payment({
   // 3-minute countdown timer (180 seconds)
   const [timeLeft, setTimeLeft] = useState(180);
 
-  // Map package name to marketing title
-  const getPackageDisplayName = (name) => {
-    if (name === '2 Cetak') return 'Premium Duo Bundle';
-    if (name === '3 Cetak') return 'Triple Fun Collage';
-    if (name === '4 Cetak') return 'Party Pack Quad';
-    if (name === '5 Cetak') return 'Super Party Pack';
-    return name || 'Premium Duo Bundle';
+  // Map package to price display
+  const getPackagePriceDisplay = (pkg) => {
+    if (!pkg) return 'Rp 25.000';
+    if (pkg.price) return pkg.price;
+    const amount = pkg.total_amount ?? pkg.extra_price ?? pkg.amount;
+    if (amount !== undefined && amount !== null && amount !== '') {
+      return `Rp ${Number(amount).toLocaleString('id-ID')}`;
+    }
+    return 'Rp 25.000';
+  };
+
+  // Map package name
+  const getPackageDisplayName = (pkg) => {
+    if (!pkg) return '2 Cetak';
+    if (pkg.name) return pkg.name;
+    const copies = pkg.quantity || pkg.copies || 2;
+    return `${copies} Cetak`;
+  };
+
+  const getQuantityDisplay = (pkg) => {
+    if (!pkg) return 2;
+    return pkg.quantity || pkg.copies || 2;
   };
 
   // Format MM:SS
@@ -124,7 +139,15 @@ export default function Payment({
               </div>
 
               {qrCode && timeLeft > 0 ? (
-                <img src={qrCode} alt="QR Code" className="pay-qr-img" />
+                <img 
+                  src={
+                    qrCode.startsWith('http') || qrCode.startsWith('data:')
+                      ? qrCode
+                      : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCode)}`
+                  } 
+                  alt="QR Code" 
+                  className="pay-qr-img" 
+                />
               ) : (
                 <div className="pay-qr-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#64748b' }}>
                   Expired
@@ -132,7 +155,7 @@ export default function Payment({
               )}
 
               <p className="pay-price-label">Total Payment</p>
-              <h1 className="pay-price-val">{selectedPackage?.price || 'Rp55.000'}</h1>
+              <h1 className="pay-price-val">{getPackagePriceDisplay(selectedPackage)}</h1>
 
               {/* Expiration Timer Bar Embedded Inside Card Footer */}
               <div className="pay-timer-bar">
@@ -159,11 +182,11 @@ export default function Payment({
               <h3 className="pay-summary-title">Session Summary</h3>
               <div className="pay-summary-row">
                 <span className="pay-summary-label">Selected Package</span>
-                <span className="pay-summary-value">{getPackageDisplayName(selectedPackage?.name)}</span>
+                <span className="pay-summary-value">{getPackageDisplayName(selectedPackage)}</span>
               </div>
               <div className="pay-summary-row">
                 <span className="pay-summary-label">Print Quantity</span>
-                <span className="pay-summary-value">{selectedPackage?.quantity || 2} Copies</span>
+                <span className="pay-summary-value">{getQuantityDisplay(selectedPackage)} Copies</span>
               </div>
               <div className="pay-summary-row">
                 <span className="pay-summary-label">Process Estimate</span>
