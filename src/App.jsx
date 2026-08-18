@@ -20,6 +20,31 @@ import Email from "./pages/Email.jsx";
 import Done from "./pages/Done.jsx";
 import AdminSettings from "./pages/AdminSettings.jsx";
 
+const grabLiveViewFrame = () => {
+  const element = document.querySelector(".camera-video-element");
+  if (!element) return null;
+
+  try {
+    const canvas = document.createElement("canvas");
+    if (element.tagName === "IMG") {
+      canvas.width = element.naturalWidth || element.width || 1024;
+      canvas.height = element.naturalHeight || element.height || 768;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(element, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.85);
+    } else if (element.tagName === "VIDEO") {
+      canvas.width = element.videoWidth || 1024;
+      canvas.height = element.videoHeight || 768;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(element, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.85);
+    }
+  } catch (err) {
+    console.warn("Gagal mengambil freeze frame:", err);
+  }
+  return null;
+};
+
 function App() {
   // Hooks
   const camera = useCamera();
@@ -39,6 +64,8 @@ function App() {
   const [selectedPhotos, setSelectedPhotos] = useState([]); // Selected dari preview
   const paymentPollRef = useRef(null);
   const isCapturingRef = useRef(false);
+  const activeCaptureControllerRef = useRef(null);
+  const dslrCapturePromiseRef = useRef(null);
 
   // Get data
   const { data: printOptions } = useFetch(
@@ -72,16 +99,19 @@ function App() {
   const [finalVideoTransition, setFinalVideoTransition] = useState(null);
   const [finalVideoLoop, setFinalVideoLoop] = useState(null);
   const [reviewCountdown, setReviewCountdown] = useState(0);
+  const [retakeCounts, setRetakeCounts] = useState({});
   const [captureDelay, setCaptureDelay] = useState(10); // default 10s capture delay
   const [cameraDevices, setCameraDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState(() => {
     return localStorage.getItem('kiosk_camera_device_id') || '';
   });
+  const [liveViewTimestamp, setLiveViewTimestamp] = useState(() => Date.now());
   
   // Live Photo (Secret Boomerang short video) states
   const [livePhotos, setLivePhotos] = useState([]);
   const mediaRecorderRef = useRef(null);
   const videoChunksRef = useRef([]);
+  const [isCapturingDslr, setIsCapturingDslr] = useState(false);
 
   const currentFrameObj =
     workflow.frames &&
@@ -95,7 +125,10 @@ function App() {
     if (e && e.preventDefault) e.preventDefault();
     setError(null);
     try {
-      await workflow.verifyBooking(bookingCode);
+      const result = await workflow.verifyBooking(bookingCode);
+      if (result.booking && result.booking.status !== "paid") {
+        throw new Error("Booking belum lunas! Silakan lakukan pembayaran online terlebih dahulu.");
+      }
       setCurrentPage("frame");
     } catch (err) {
       setError(err.message);
@@ -140,6 +173,17 @@ function App() {
     setSelectedFrame(frameId);
   };
 
+  const triggerStartLiveView = useCallback(async () => {
+    try {
+      await fetch(`${CONFIG.API_URL}/session/liveview/start`, { method: 'POST' });
+      // Wait 1 second for digiCamControl to fully initialize port 5514 stream
+      await new Promise(r => setTimeout(r, 1000));
+      setLiveViewTimestamp(Date.now());
+    } catch (err) {
+      console.warn('Failed to start live view:', err);
+    }
+  }, []);
+
   const handleProceedFromFrame = async (overrideFrameId) => {
     const frameIdToUse = overrideFrameId || selectedFrame;
     if (!frameIdToUse) return;
@@ -149,9 +193,14 @@ function App() {
       setPhotoIndex(0);
       setCapturedPhotos([]);
       setLivePhotos([]); // Reset secret live photos
+      setRetakeCounts({});
 
       // Start camera
-      await startCamera(selectedDeviceId || "user");
+      if (selectedDeviceId === 'dslr_liveview') {
+        triggerStartLiveView();
+      } else {
+        await startCamera(selectedDeviceId || "user");
+      }
 
       // Auto start first countdown
       setCountdown(captureDelay);
@@ -184,16 +233,102 @@ function App() {
     setActivePreviewPhoto(null);
     setIsTimerPaused(false);
     isCapturingRef.current = false;
+    setIsCapturingDslr(false);
+
+    // Mulai unduhan latar belakang untuk foto yang baru saja disimpan (kept)
+    const lastPhotoIdx = capturedPhotos.length - 1;
+    const lastPhoto = capturedPhotos[lastPhotoIdx];
+    if (lastPhoto && typeof lastPhoto === 'object' && lastPhoto.isPendingDownload) {
+      setCapturedPhotos((prev) => {
+        const next = [...prev];
+        next[lastPhotoIdx] = {
+          ...lastPhoto,
+          isPendingDownload: false,
+          isDownloading: true,
+        };
+        return next;
+      });
+
+      const rawUrl = lastPhoto.url;
+      const downloadController = lastPhoto.controller;
+
+      (async () => {
+        try {
+          const downloadTimeoutId = setTimeout(() => downloadController.abort(), 15000);
+          const imgRes = await fetch(rawUrl, {
+            signal: downloadController.signal
+          });
+          clearTimeout(downloadTimeoutId);
+
+          if (!imgRes.ok) {
+            throw new Error(`Gagal mengunduh gambar DSLR dari backend. Status: ${imgRes.status}`);
+          }
+          
+          const blob = await imgRes.blob();
+
+          if (blob) {
+            setCapturedPhotos((prev) => {
+              return prev.map((item) => {
+                if (item && item.url === rawUrl) {
+                  return blob; // ganti placeholder dengan Blob biner asli
+                }
+                return item;
+              });
+            });
+            console.log(`[DSLR Background Download] Selesai mengunduh foto ke-${lastPhotoIdx + 1}`);
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') {
+            console.log(`[DSLR Background Download] Unduhan untuk foto ke-${lastPhotoIdx + 1} dibatalkan.`);
+          } else {
+            console.error(`[DSLR Background Download] Gagal mengunduh foto ke-${lastPhotoIdx + 1}:`, err);
+          }
+        }
+      })();
+    }
 
     if (photoIndex >= 10) {
-      stopCamera();
+      // Periksa apakah ada unduhan latar belakang DSLR yang masih berjalan atau proses jepret aktif
+      const stillDownloading = capturedPhotos.some(p => p && typeof p === 'object' && (p.isDownloading || p.isPendingDownload || p.isDslrPlaceholder));
+      if (stillDownloading) {
+        setIsTimerPaused(true);
+        setError("Menyinkronkan foto resolusi tinggi DSLR, mohon tunggu sebentar...");
+        
+        const checkInterval = setInterval(() => {
+          setCapturedPhotos((currentPhotos) => {
+            const finished = !currentPhotos.some(p => p && typeof p === 'object' && (p.isDownloading || p.isPendingDownload || p.isDslrPlaceholder));
+            if (finished) {
+              clearInterval(checkInterval);
+              setError(null);
+              setIsTimerPaused(false);
+              
+              if (selectedDeviceId === 'dslr_liveview') {
+                // Jangan hentikan Live View
+              } else {
+                stopCamera();
+              }
+              setCurrentPage("preview");
+              setPreviewTimer(420);
+            }
+            return currentPhotos;
+          });
+        }, 300);
+        return;
+      }
+
+      if (selectedDeviceId === 'dslr_liveview') {
+        // Jangan hentikan Live View agar kamera DSLR/digiCamControl tidak hang/beku saat transisi sesi!
+        // Aliran stream tetap aktif di background sehingga sesi berikutnya langsung menyala instan.
+      } else {
+        stopCamera();
+      }
       setCurrentPage("preview");
       setPreviewTimer(420); // Reset 7 menit timer
     } else {
       setCountdown(captureDelay);
       setIsCountingDown(true);
     }
-  }, [photoIndex, stopCamera, captureDelay]);
+  }, [photoIndex, stopCamera, captureDelay, selectedDeviceId, triggerStartLiveView, capturedPhotos]);
 
   // Start secret live photo video recording
   const startRecording = useCallback(() => {
@@ -226,12 +361,6 @@ function App() {
         }
       };
 
-      mediaRecorder.onstop = () => {
-        const videoBlob = new Blob(videoChunksRef.current, { type: 'video/mp4' });
-        setLivePhotos((prev) => [...prev, videoBlob]);
-        console.log("Secret Live Photo captured. Video Blob size:", videoBlob.size);
-      };
-
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start();
       console.log("Started secret live photo recording...");
@@ -240,86 +369,225 @@ function App() {
     }
   }, [cameraStream]);
 
+  const preTriggerDslrCapture = useCallback(() => {
+    if (selectedDeviceId !== 'dslr_liveview' || dslrCapturePromiseRef.current) return;
+
+    console.log("[DSLR Pre-trigger] Triggering capture 1 second early to compensate for latency...");
+    setIsCapturingDslr(true);
+    const captureController = new AbortController();
+    activeCaptureControllerRef.current = captureController;
+
+    // Dinaikkan dari 20s -> 30s: worst-case backend sekarang bisa sampai
+    // ~21s (15s poll capture + 3s download + 3s rearm live view), jadi 20s
+    // terlalu mepet dan bisa bikin request di-abort padahal kamera masih
+    // proses normal (bukan benar-benar macet).
+    const timeoutId = setTimeout(() => captureController.abort(), 30000);
+
+    const promise = (async () => {
+      try {
+        const response = await fetch(`${CONFIG.API_URL}/session/${workflow.sessionId}/capture-dslr`, {
+          method: "POST",
+          signal: captureController.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || errData.messages?.error || errData.message || `Gagal memicu DSLR (${response.status})`);
+        }
+        return await response.json();
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      } finally {
+        activeCaptureControllerRef.current = null;
+      }
+    })();
+
+    dslrCapturePromiseRef.current = {
+      promise,
+      controller: captureController
+    };
+  }, [selectedDeviceId, workflow.sessionId]);
+
   const capturePhoto = useCallback(async () => {
     if (photoIndex >= 10 || isTimerPaused || isCapturingRef.current) return;
 
-    // Stop recording secret live photo
+    // Stop recording secret live photo and retrieve video blob
+    let videoBlob = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       try {
+        const stopPromise = new Promise((resolve) => {
+          mediaRecorderRef.current.onstop = () => {
+            const blob = new Blob(videoChunksRef.current, { type: 'video/mp4' });
+            resolve(blob);
+          };
+        });
         mediaRecorderRef.current.stop();
-        console.log("Stopped secret live photo recording.");
+        videoBlob = await stopPromise;
+        console.log("Stopped secret live photo recording. Blob size:", videoBlob?.size);
       } catch (e) {
         console.error("Error stopping MediaRecorder:", e);
       }
     }
 
     isCapturingRef.current = true;
+    setIsCapturingDslr(true);
     setError(null);
-
-    // Trigger flash effect
-    setIsFlashing(true);
-    setTimeout(() => setIsFlashing(false), 150);
 
     try {
       let photo;
-      try {
-        // Set a 4-second timeout for DSLR capture trigger
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-        // Pemicu Shutter DSLR Fisik melalui API Backend
-        const response = await fetch(`${CONFIG.API_URL}/session/${workflow.sessionId}/capture-dslr`, {
-          method: "POST",
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.messages?.error || errData.message || `Gagal memicu DSLR (${response.status})`);
-        }
-
-        const result = await response.json();
-        if (!result.status || !result.data?.image_url) {
-          throw new Error(result.message || "Gagal menjepret gambar.");
-        }
-
-        // Download file resolusi tinggi dari backend sebagai Blob with 3-second timeout
+      if (selectedDeviceId === 'dslr_liveview') {
+        const currentPhotoIdx = photoIndex; // catat index saat ini
         const downloadController = new AbortController();
-        const downloadTimeoutId = setTimeout(() => downloadController.abort(), 3000);
+        const captureController = new AbortController();
+        activeCaptureControllerRef.current = captureController;
 
-        const imgRes = await fetch(result.data.image_url, {
-          signal: downloadController.signal
-        });
-        
-        clearTimeout(downloadTimeoutId);
-        photo = await imgRes.blob();
-      } catch (dslrErr) {
-        console.warn("DSLR capture failed or timed out, falling back to webcam/web browser camera:", dslrErr);
-        // Fallback to webcam photo
-        photo = await takePhoto();
-      }
+        const captureId = Date.now(); // Unique ID for this capture attempt to prevent race conditions on retake
 
-      if (photo) {
-        setCapturedPhotos((prev) => [...prev, photo]);
-        setActivePreviewPhoto(photo);
-        setIsTimerPaused(true);
+        // 1. Trigger flash effect instantly
+        setIsFlashing(true);
+        setTimeout(() => setIsFlashing(false), 150);
 
-        const nextIndex = photoIndex + 1;
-        setPhotoIndex(nextIndex);
-        
-        // Start 10-second review/retake thinking timer
-        setReviewCountdown(10);
+        try {
+          let result;
+          if (dslrCapturePromiseRef.current) {
+            console.log("[DSLR Capture] Awaiting pre-triggered DSLR capture...");
+            result = await dslrCapturePromiseRef.current.promise;
+            dslrCapturePromiseRef.current = null;
+          } else {
+            console.log("[DSLR Capture] No pre-trigger found, triggering DSLR capture now...");
+            // Dinaikkan dari 20s -> 30s: worst-case backend sekarang bisa
+            // sampai ~21s (15s poll capture + 3s download + 3s rearm live
+            // view), jadi 20s terlalu mepet dan bisa bikin request di-abort
+            // padahal kamera masih proses normal (bukan benar-benar macet).
+            const timeoutId = setTimeout(() => captureController.abort(), 30000);
+
+            // 2. Pemicu Shutter DSLR Fisik melalui API Backend
+            const response = await fetch(`${CONFIG.API_URL}/session/${workflow.sessionId}/capture-dslr`, {
+              method: "POST",
+              signal: captureController.signal
+            });
+            
+            clearTimeout(timeoutId);
+            activeCaptureControllerRef.current = null;
+            
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.error || errData.messages?.error || errData.message || `Gagal memicu DSLR (${response.status})`);
+            }
+
+            result = await response.json();
+          }
+
+          if (!result.status || !result.data?.image_url) {
+            throw new Error(result.message || "Gagal menjepret gambar.");
+          }
+
+          const rawUrl = result.data.image_url;
+          const previewUrl = result.data.preview_url || rawUrl;
+          
+          // 3. Tampilkan pratinjau Nice Shot setelah gambar benar-benar didapatkan dari DSLR
+          setActivePreviewPhoto(previewUrl);
+          setIsTimerPaused(true);
+          setReviewCountdown(10);
+
+          // 4. Tambahkan foto ke capturedPhotos dengan url yang sudah siap
+          const newPhotoPlaceholder = {
+            id: captureId,
+            url: rawUrl,
+            isDownloading: true, // Mulai download langsung di background
+            isPendingDownload: false,
+            isDslrPlaceholder: false,
+            controller: downloadController
+          };
+
+          setCapturedPhotos((prev) => [...prev, newPhotoPlaceholder]);
+          setLivePhotos((prev) => [...prev, videoBlob || null]);
+          
+          // Update index foto
+          const nextIndex = currentPhotoIdx + 1;
+          setPhotoIndex(nextIndex);
+
+          // Jalankan download biner
+          (async () => {
+            try {
+              const downloadTimeoutId = setTimeout(() => downloadController.abort(), 15000);
+              const imgRes = await fetch(rawUrl, {
+                signal: downloadController.signal
+              });
+              clearTimeout(downloadTimeoutId);
+
+              if (!imgRes.ok) {
+                throw new Error(`Gagal mengunduh gambar DSLR dari backend. Status: ${imgRes.status}`);
+              }
+              
+              const blob = await imgRes.blob();
+
+              if (blob) {
+                setCapturedPhotos((prev) => {
+                  return prev.map((item) => {
+                    if (item && item.id === captureId) {
+                      return blob; // ganti placeholder dengan Blob biner asli
+                    }
+                    return item;
+                  });
+                });
+                console.log(`[DSLR Background Download] Selesai mengunduh foto ke-${currentPhotoIdx + 1}`);
+              }
+            } catch (err) {
+              if (err.name === 'AbortError') {
+                console.log(`[DSLR Background Download] Unduhan untuk foto ke-${currentPhotoIdx + 1} dibatalkan.`);
+              } else {
+                console.error(`[DSLR Background Download] Gagal mengunduh foto ke-${currentPhotoIdx + 1}:`, err);
+              }
+            }
+          })();
+
+        } catch (dslrErr) {
+          dslrCapturePromiseRef.current = null;
+          activeCaptureControllerRef.current = null;
+          console.warn("DSLR capture failed or timed out:", dslrErr);
+          
+          // Jika di-abort oleh user (karena menekan Retake), diamkan error-nya
+          if (dslrErr.name === 'AbortError' && !isCapturingRef.current) {
+            console.log("DSLR capture fetch aborted silently by user retake action.");
+            return;
+          }
+
+          let userFriendlyMsg = dslrErr.message;
+          if (dslrErr.name === 'AbortError' || dslrErr.message?.includes('abort')) {
+            userFriendlyMsg = "DSLR Capture timed out (kamera tidak merespons). Pastikan kamera menyala dan kabel USB terhubung dengan benar.";
+          }
+          setError(userFriendlyMsg || "Gagal menjepret gambar dengan DSLR. Pastikan kamera menyala.");
+
+          // Bersihkan state jika gagal
+          setActivePreviewPhoto(null);
+          setIsTimerPaused(false);
+          isCapturingRef.current = false;
+          setIsCapturingDslr(false);
+        }
       } else {
-        isCapturingRef.current = false;
+        // Jika menggunakan webcam biasa atau capture card, langsung ambil dari stream video browser
+        photo = await takePhoto();
+        if (photo) {
+          setCapturedPhotos((prev) => [...prev, photo]);
+          setLivePhotos((prev) => [...prev, videoBlob || null]);
+          setActivePreviewPhoto(photo);
+          setIsTimerPaused(true);
+          const nextIndex = photoIndex + 1;
+          setPhotoIndex(nextIndex);
+          setReviewCountdown(10);
+        } else {
+          isCapturingRef.current = false;
+        }
       }
     } catch (err) {
       console.error("Capture error:", err);
       setError(err.message || "Gagal mengambil foto.");
       isCapturingRef.current = false;
+      setIsCapturingDslr(false);
     }
-  }, [photoIndex, isTimerPaused, workflow.sessionId, takePhoto]);
+  }, [photoIndex, isTimerPaused, workflow.sessionId, takePhoto, selectedDeviceId, triggerStartLiveView]);
 
   const handleRetakePhoto = useCallback(() => {
     if (capturedPhotos.length === 0) return;
@@ -328,13 +596,48 @@ function App() {
     setActivePreviewPhoto(null);
     setIsTimerPaused(false);
     isCapturingRef.current = false;
+    setIsCapturingDslr(false);
+
+    // Batalkan pre-trigger jika ada
+    if (dslrCapturePromiseRef.current) {
+      try {
+        dslrCapturePromiseRef.current.controller.abort();
+        console.log("[DSLR Capture] Menghentikan pre-trigger karena user mengambil ulang (retake) foto.");
+      } catch (e) {
+        console.error("Gagal menghentikan pre-trigger:", e);
+      }
+      dslrCapturePromiseRef.current = null;
+    }
+
+    // Batalkan request capture jika masih berjalan
+    if (activeCaptureControllerRef.current) {
+      try {
+        activeCaptureControllerRef.current.abort();
+        console.log("[DSLR Capture] Menghentikan request pemicu DSLR karena user mengambil ulang (retake) foto.");
+      } catch (e) {
+        console.error("Gagal menghentikan capture request:", e);
+      }
+      activeCaptureControllerRef.current = null;
+    }
+
+    // Ambil item terakhir dan batalkan proses unduhan jika masih berjalan
+    const lastPhoto = capturedPhotos[capturedPhotos.length - 1];
+    if (lastPhoto && typeof lastPhoto === 'object' && lastPhoto.controller) {
+      try {
+        lastPhoto.controller.abort();
+        console.log("[DSLR Capture] Menghentikan unduhan background karena user mengambil ulang (retake) foto.");
+      } catch (e) {
+        console.error("Gagal menghentikan unduhan:", e);
+      }
+    }
 
     setCapturedPhotos((prev) => prev.slice(0, -1));
     setLivePhotos((prev) => prev.slice(0, -1)); // Discard corresponding secret video
     setPhotoIndex((prev) => Math.max(0, prev - 1));
+    
     setCountdown(captureDelay);
     setIsCountingDown(true);
-  }, [capturedPhotos, captureDelay]);
+  }, [capturedPhotos, captureDelay, selectedDeviceId, triggerStartLiveView, retakeCounts]);
 
   // Load and switch camera devices
   useEffect(() => {
@@ -350,15 +653,29 @@ function App() {
   }, [currentPage, getCameraList, selectedDeviceId]);
 
   const handleSelectCameraDevice = useCallback(async (deviceId) => {
+    const oldDeviceId = selectedDeviceId;
     setSelectedDeviceId(deviceId);
     try {
-      stopCamera();
+      // Clean up old source
+      if (oldDeviceId === 'dslr_liveview') {
+        fetch(`${CONFIG.API_URL}/session/liveview/stop`, { method: 'POST' })
+          .catch(err => console.warn('Failed to stop live view:', err));
+      } else {
+        stopCamera();
+      }
+
       await new Promise(r => setTimeout(r, 400));
-      await startCamera(deviceId);
+
+      // Start new source
+      if (deviceId === 'dslr_liveview') {
+        triggerStartLiveView();
+      } else {
+        await startCamera(deviceId);
+      }
     } catch (err) {
       setError(err.message);
     }
-  }, [stopCamera, startCamera]);
+  }, [stopCamera, startCamera, selectedDeviceId, triggerStartLiveView]);
 
   // Secret access to admin setup page
   useEffect(() => {
@@ -397,8 +714,12 @@ function App() {
     )
       return;
 
-    if (countdown === Math.min(captureDelay, 3)) {
+    if (countdown === Math.min(captureDelay, 10)) {
       startRecording();
+    }
+
+    if (countdown === 1 && selectedDeviceId === 'dslr_liveview') {
+      preTriggerDslrCapture();
     }
 
     if (countdown === 0) {
@@ -420,6 +741,8 @@ function App() {
     isCountingDown,
     capturePhoto,
     startRecording,
+    selectedDeviceId,
+    preTriggerDslrCapture,
   ]);
 
   // ============ PREVIEW PAGE - 7 Menit Timer ============
@@ -692,6 +1015,7 @@ function App() {
           onCapture={handleTriggerCountdown}
           onRetake={handleRetakePhoto}
           onKeep={handleKeepPhoto}
+          canRetake={true}
           reviewCountdown={reviewCountdown}
           captureDelay={captureDelay}
           setCaptureDelay={setCaptureDelay}
@@ -703,6 +1027,8 @@ function App() {
           cameraDevices={cameraDevices}
           selectedDeviceId={selectedDeviceId}
           onSelectCameraDevice={handleSelectCameraDevice}
+          liveViewTimestamp={liveViewTimestamp}
+          isCapturing={isCapturingDslr}
         />
       );
 
@@ -739,6 +1065,7 @@ function App() {
       return (
         <Done
           userEmail={userEmail}
+          finalImage={finalImage}
           finalVideoTransition={finalVideoTransition}
           onReset={() => {
             setBookingCode("");
@@ -747,6 +1074,7 @@ function App() {
             setSelectedPhotos([]);
             setCroppedPhotos([]);
             setLivePhotos([]);
+            setRetakeCounts({});
             setFinalImage(null);
             setPhotoIndex(0);
             setCurrentPage("welcome");

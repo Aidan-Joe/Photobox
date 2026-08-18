@@ -36,7 +36,9 @@ export function useCamera() {
           audio: false,
         };
 
-        if (deviceIdOrFacingMode && deviceIdOrFacingMode.length > 25) {
+        if (deviceIdOrFacingMode === 'laptop_camera' || deviceIdOrFacingMode === 'user') {
+          constraints.video.facingMode = 'user';
+        } else if (deviceIdOrFacingMode && deviceIdOrFacingMode.length > 25) {
           constraints.video.deviceId = { exact: deviceIdOrFacingMode };
         } else {
           constraints.video.facingMode = deviceIdOrFacingMode || 'user';

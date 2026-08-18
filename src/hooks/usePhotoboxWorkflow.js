@@ -61,6 +61,7 @@ export function usePhotoboxWorkflow() {
 
       return {
         bookingId,
+        booking: bookingResult.booking,
         printOptions,
         frames,
         filters,

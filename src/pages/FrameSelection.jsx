@@ -9,7 +9,7 @@ export default function FrameSelection({
   error,
 }) {
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [timeLeft, setTimeLeft] = useState(600); // 10 minutes (600 seconds)
+  const [timeLeft, setTimeLeft] = useState(420); // 7 minutes (420 seconds)
 
   // Timer Effect
   useEffect(() => {

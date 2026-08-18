@@ -109,6 +109,22 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, on
           Silakan masukkan kode verifikasi 6 digit yang dikirimkan ke email Anda untuk memulai sesi foto Anda.
         </p>
         {error && <p className="kiosk-error" style={{ fontSize: '15px', marginTop: '24px', fontWeight: '600' }}>{error}</p>}
+        
+        {/* Back Button */}
+        {onBack && (
+          <button 
+            className="btn-kembali" 
+            onClick={onBack}
+            disabled={loading}
+            style={{ marginTop: '32px' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Kembali
+          </button>
+        )}
       </div>
 
       {/* Right Panel */}
@@ -162,16 +178,6 @@ export default function Booking({ bookingCode = '', setBookingCode, onSubmit, on
             {loading ? '⏳ Memverifikasi...' : 'Masukkan Kode'}
           </button>
 
-          {/* Back Button */}
-          {onBack && (
-            <button 
-              className="booking-back-btn" 
-              onClick={onBack}
-              disabled={loading}
-            >
-              Kembali
-            </button>
-          )}
         </div>
       </div>
 

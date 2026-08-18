@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
+import { CONFIG } from '../config.js';
+import DslrLiveView from '../components/DslrLiveView.jsx';
 
 export default function AdminSettings({ onSave, onCancel }) {
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState('');
   const [stream, setStream] = useState(null);
   const [error, setError] = useState(null);
+  const [liveViewStarting, setLiveViewStarting] = useState(false);
   const videoRef = useRef(null);
 
   // Fetch camera list
@@ -26,7 +29,7 @@ export default function AdminSettings({ onSave, onCancel }) {
         
         // Load saved device or default to first
         const saved = localStorage.getItem('kiosk_camera_device_id');
-        if (saved && videoDevices.some(d => d.deviceId === saved)) {
+        if (saved && (saved === 'dslr_liveview' || saved === 'laptop_camera' || videoDevices.some(d => d.deviceId === saved))) {
           setSelectedDevice(saved);
         } else if (videoDevices.length > 0) {
           setSelectedDevice(videoDevices[0].deviceId);
@@ -48,16 +51,45 @@ export default function AdminSettings({ onSave, onCancel }) {
   useEffect(() => {
     if (!selectedDevice) return;
 
+    if (selectedDevice === 'dslr_liveview') {
+      setStream(null);
+      setError(null);
+      setLiveViewStarting(true);
+      
+      // Auto-trigger live view start in digiCamControl via backend
+      fetch(`${CONFIG.API_URL}/session/liveview/start`, { method: 'POST' })
+        .then(async () => {
+          // Wait 1 second for digiCamControl to fully initialize port 5514 stream
+          await new Promise(r => setTimeout(r, 1000));
+          setLiveViewStarting(false);
+        })
+        .catch(err => {
+          console.warn('Failed to auto-start live view:', err);
+          setLiveViewStarting(false);
+        });
+        
+      return () => {
+        // Auto-stop live view when component unmounts or selected device changes
+        fetch(`${CONFIG.API_URL}/session/liveview/stop`, { method: 'POST' })
+          .catch(err => console.warn('Failed to auto-stop live view:', err));
+      };
+    }
+
     let activeStream = null;
 
     const constraints = {
       video: {
-        deviceId: { exact: selectedDevice },
         width: { ideal: 1280 },
         height: { ideal: 720 }
       },
       audio: false
     };
+
+    if (selectedDevice === 'laptop_camera') {
+      constraints.video.facingMode = 'user';
+    } else {
+      constraints.video.deviceId = { exact: selectedDevice };
+    }
 
     navigator.mediaDevices.getUserMedia(constraints)
       .then((mediaStream) => {
@@ -76,6 +108,10 @@ export default function AdminSettings({ onSave, onCancel }) {
     };
   }, [selectedDevice]);
 
+  // NOTE: retry/reconnect loop untuk live view sudah ditangani langsung di
+  // dalam komponen <DslrLiveView> (lihat src/components/DslrLiveView.jsx),
+  // jadi tidak perlu ada watchdog terpisah lagi di sini.
+
   const handleSave = () => {
     localStorage.setItem('kiosk_camera_device_id', selectedDevice);
     if (stream) {
@@ -90,6 +126,8 @@ export default function AdminSettings({ onSave, onCancel }) {
     }
     onCancel();
   };
+
+
 
   return (
     <div className="admin-settings-container" style={{
@@ -157,6 +195,8 @@ export default function AdminSettings({ onSave, onCancel }) {
               cursor: 'pointer'
             }}
           >
+            <option value="dslr_liveview">DSLR Live View (via digiCamControl)</option>
+            <option value="laptop_camera">Kamera Laptop (Webcam Bawaan)</option>
             {devices.map((device, idx) => (
               <option key={device.deviceId} value={device.deviceId}>
                 {device.label || `Camera ${idx + 1}`}
@@ -179,7 +219,13 @@ export default function AdminSettings({ onSave, onCancel }) {
           justifyContent: 'center',
           alignItems: 'center'
         }}>
-          {stream ? (
+          {selectedDevice === 'dslr_liveview' ? (
+            liveViewStarting ? (
+              <div style={{ color: '#64748b', fontSize: '14px' }}>Menghubungkan ke DSLR Live View...</div>
+            ) : (
+              <DslrLiveView style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            )
+          ) : stream ? (
             <video
               ref={videoRef}
               autoPlay
@@ -205,6 +251,8 @@ export default function AdminSettings({ onSave, onCancel }) {
             LIVE MONITOR
           </div>
         </div>
+
+
 
         {/* Buttons */}
         <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
