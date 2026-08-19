@@ -10,12 +10,27 @@ function PreviewPhotoThumbnail({ photo }) {
   const [url, setUrl] = useState("");
 
   useEffect(() => {
-    if (!photo) return;
-    const objectUrl = URL.createObjectURL(photo);
-    setUrl(objectUrl);
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
+    if (!photo) {
+      setUrl("");
+      return;
+    }
+    if (typeof photo === "string") {
+      setUrl(photo);
+      return;
+    }
+    if (photo && photo.url) {
+      setUrl(photo.url);
+      return;
+    }
+    if (photo instanceof Blob) {
+      const objectUrl = URL.createObjectURL(photo);
+      setUrl(objectUrl);
+      return () => {
+        URL.revokeObjectURL(objectUrl);
+      };
+    } else {
+      setUrl("");
+    }
   }, [photo]);
 
   if (!url) {
@@ -47,13 +62,27 @@ function InteractivePhotoSlot({
       return;
     }
 
-    const objectUrl = URL.createObjectURL(photo);
+    if (typeof photo === "string") {
+      setUrl(photo);
+      return;
+    }
 
-    console.log(objectUrl);
+    if (photo && photo.url) {
+      setUrl(photo.url);
+      return;
+    }
 
-    setUrl(objectUrl);
-
-    return () => URL.revokeObjectURL(objectUrl);
+    if (photo instanceof Blob) {
+      try {
+        const objectUrl = URL.createObjectURL(photo);
+        setUrl(objectUrl);
+        return () => URL.revokeObjectURL(objectUrl);
+      } catch (e) {
+        console.error("Failed to create object URL for photo:", e);
+      }
+    } else {
+      setUrl("");
+    }
   }, [photo]);
 
   const t = transform || { scale: 1, x: 0, y: 0 };
@@ -453,48 +482,50 @@ export default function Preview({
           slotHeights.push(slotEl ? slotEl.clientHeight : 113);
         }
 
-        // Render transition video
-        console.log("Rendering transition video...");
+        // Render transition and loop videos in parallel to optimize processing speed
+        console.log("Rendering transition and loop videos in parallel...");
         try {
-          finalVideoTransition = await renderFinalVideo({
-            frameUrl,
-            croppedPhotos: croppedFiles,
-            livePhotos: selectedLivePhotos,
-            holes: detectedHoles,
-            width: frameSize.width,
-            height: frameSize.height,
-            transforms,
-            slotWidths,
-            slotHeights,
-            mode: "transition",
-            onProgress: (p) => {
-              setProcessingProgress(15 + Math.round(p * 0.6)); // Maps 0-100 to 15-75
-            }
-          });
-        } catch (e) {
-          console.error("Gagal membuat video transisi:", e);
-        }
+          const [transitionResult, loopResult] = await Promise.all([
+            renderFinalVideo({
+              frameUrl,
+              croppedPhotos: croppedFiles,
+              livePhotos: selectedLivePhotos,
+              holes: detectedHoles,
+              width: frameSize.width,
+              height: frameSize.height,
+              transforms,
+              slotWidths,
+              slotHeights,
+              mode: "transition",
+              onProgress: (p) => {
+                // Map progress based on the longer video rendering
+                setProcessingProgress(15 + Math.round(p * 0.8)); // Maps 0-100 to 15-95
+              }
+            }).catch(e => {
+              console.error("Gagal membuat video transisi:", e);
+              return null;
+            }),
+            renderFinalVideo({
+              frameUrl,
+              croppedPhotos: croppedFiles,
+              livePhotos: selectedLivePhotos,
+              holes: detectedHoles,
+              width: frameSize.width,
+              height: frameSize.height,
+              transforms,
+              slotWidths,
+              slotHeights,
+              mode: "loop"
+            }).catch(e => {
+              console.error("Gagal membuat video loop:", e);
+              return null;
+            })
+          ]);
 
-        // Render loop video
-        console.log("Rendering loop video...");
-        try {
-          finalVideoLoop = await renderFinalVideo({
-            frameUrl,
-            croppedPhotos: croppedFiles,
-            livePhotos: selectedLivePhotos,
-            holes: detectedHoles,
-            width: frameSize.width,
-            height: frameSize.height,
-            transforms,
-            slotWidths,
-            slotHeights,
-            mode: "loop",
-            onProgress: (p) => {
-              setProcessingProgress(75 + Math.round(p * 0.2)); // Maps 0-100 to 75-95
-            }
-          });
+          finalVideoTransition = transitionResult;
+          finalVideoLoop = loopResult;
         } catch (e) {
-          console.error("Gagal membuat video loop:", e);
+          console.error("Error rendering videos in parallel:", e);
         }
       }
       setProcessingProgress(98);

@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Kavoon&display=swap');
 
 .counter {
   font-size: 16px;
@@ -183,6 +184,407 @@
     right: 0;
     border-right-color: var(--border);
   }
+}
+
+/* ================= WELCOME SCREEN (AESTHETIC THEME) ================= */
+.welcome-container.aesthetic-theme {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+}
+
+.aesthetic-bg-image-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+/* Decorative Polaroids on Welcome Page */
+.aesthetic-polaroid {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 2;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.08));
+}
+
+.aesthetic-polaroid img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.polaroid-christmas {
+  width: 250px;
+  top: 8%;
+  left: 6%;
+}
+
+.polaroid-couple {
+  width: 230px;
+  bottom: 12%;
+  left: 8%;
+}
+
+.polaroid-friends {
+  width: 250px;
+  top: 22%;
+  right: 6%;
+}
+
+/* Hover effects for interactive Polaroids */
+.aesthetic-polaroid:hover {
+  transform: scale(1.08) translateY(-5px);
+  filter: drop-shadow(0 20px 35px rgba(0, 0, 0, 0.15));
+  z-index: 15;
+}
+
+.aesthetic-title {
+  font-size: 92px;
+  font-family: 'Kavoon', cursive, sans-serif;
+  text-align: center;
+  line-height: 1.15;
+  max-width: 900px;
+  letter-spacing: normal;
+  margin-top: -20px;
+  margin-bottom: 16px;
+  color: #ffffff;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));
+  z-index: 5;
+  animation: aestheticTextFloat 4s ease-in-out infinite;
+}
+
+.aesthetic-subtitle {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  color: #555e6b;
+  text-align: center;
+  margin-bottom: 40px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  z-index: 5;
+  animation: aestheticTextFloat 4s ease-in-out infinite;
+  animation-delay: 0.2s;
+}
+
+@keyframes aestheticTextGradient {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes aestheticTextFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.aesthetic-btn {
+  background: #f3f858 !important;
+  color: #000000 !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  border: none !important;
+  border-radius: 9999px !important;
+  padding: 16px 48px !important;
+  box-shadow: 0 8px 24px rgba(243, 248, 88, 0.4), 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+  cursor: pointer !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 5;
+  animation: aestheticBtnPulse 3s ease-in-out infinite;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.aesthetic-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 30%;
+  height: 200%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(30deg);
+  animation: aestheticBtnShimmer 4s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes aestheticBtnShimmer {
+  0% { left: -60%; }
+  15%, 100% { left: 150%; }
+}
+
+.aesthetic-btn:hover {
+  transform: translateY(-4px) scale(1.05) !important;
+  box-shadow: 0 16px 36px rgba(243, 248, 88, 0.65), 0 6px 18px rgba(0, 0, 0, 0.12) !important;
+  background: #e2e846 !important;
+  animation-play-state: paused;
+}
+
+.aesthetic-btn:hover::after {
+  animation-play-state: paused;
+}
+
+.aesthetic-btn:active {
+  transform: translateY(-1px) scale(0.98) !important;
+  box-shadow: 0 6px 16px rgba(243, 248, 88, 0.3) !important;
+}
+
+@keyframes aestheticBtnPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 8px 24px rgba(243, 248, 88, 0.35), 0 2px 6px rgba(0, 0, 0, 0.04);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 14px 32px rgba(243, 248, 88, 0.55), 0 4px 10px rgba(0, 0, 0, 0.08);
+    background: #fcfd9b !important;
+  }
+}
+
+/* ================= BOOKING OPTION CUSTOM LAYOUT ================= */
+.booking-option-theme .frame-content-wrapper {
+  margin-top: 10px;
+}
+
+.booking-title-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  position: relative;
+}
+
+.booking-title-spark {
+  color: #a855f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: sparkRotate 4s ease-in-out infinite;
+}
+
+@keyframes sparkRotate {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(15deg) scale(1.1); }
+}
+
+.booking-option-theme .frame-selection-title {
+  color: #0f172a !important;
+  font-size: 32px !important;
+  font-weight: 800 !important;
+  margin: 0 !important;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif !important;
+  letter-spacing: -0.8px !important;
+}
+
+.booking-option-theme .frame-selection-subtitle {
+  color: #475569 !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  max-width: 600px;
+  margin: 12px auto 36px auto !important;
+  line-height: 1.5;
+}
+
+.booking-option-theme .booking-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto 28px auto;
+}
+
+.booking-option-theme .option-card {
+  position: relative;
+  background: #ffffff !important;
+  border-radius: 24px !important;
+  padding: 24px 20px 28px 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  text-align: left !important;
+  border: 3px solid transparent !important;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.03), 0 5px 15px rgba(0, 0, 0, 0.01) !important;
+  cursor: pointer !important;
+  transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  overflow: hidden;
+}
+
+.booking-option-theme .option-card:hover {
+  transform: translateY(-5px) !important;
+  border-color: #e2f952 !important;
+  box-shadow: 0 25px 45px rgba(0, 0, 0, 0.06) !important;
+}
+
+.booking-option-theme .option-card:active {
+  transform: translateY(-2px) scale(0.98) !important;
+  border-color: #e2f952 !important;
+}
+
+.booking-option-theme .option-card:focus {
+  outline: none !important;
+  border-color: #e2f952 !important;
+}
+
+.booking-option-theme .option-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease !important;
+  color: #64748b !important;
+}
+
+.booking-option-theme .option-card:hover .option-card-icon {
+  transform: scale(1.1);
+}
+
+.booking-option-theme .option-card:hover .pkg-thumb-container {
+  background: #e0f2fe !important;
+}
+
+.booking-option-theme .option-card-title {
+  color: #0f172a !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  margin-bottom: 8px !important;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif !important;
+}
+
+.booking-option-theme .option-card-desc {
+  color: #64748b !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+  margin-bottom: 20px !important;
+  min-height: 58px;
+}
+
+/* Left Card (Already Booked) - Green Theme */
+.booking-option-theme .option-card:nth-child(1) .option-card-action {
+  background: transparent !important;
+  color: #16a34a !important;
+  border: 2px solid #16a34a !important;
+  border-radius: 9999px !important;
+  padding: 10px 24px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.25s ease !important;
+  margin-top: auto;
+  width: auto !important;
+  box-sizing: border-box !important;
+}
+
+.booking-option-theme .option-card:nth-child(1):hover .option-card-action {
+  background: #16a34a !important;
+  color: #ffffff !important;
+}
+
+/* Right Card (Walk-in) - Blue Theme */
+.booking-option-theme .option-card:nth-child(2) .option-card-action {
+  background: transparent !important;
+  color: #2563eb !important;
+  border: 2px solid #2563eb !important;
+  border-radius: 9999px !important;
+  padding: 10px 24px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.25s ease !important;
+  margin-top: auto;
+  width: auto !important;
+  box-sizing: border-box !important;
+}
+
+.booking-option-theme .option-card:nth-child(2):hover .option-card-action {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+/* Smartphone Graphic for Sudah Booking */
+.phone-graphic-container, .photobox-graphic-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  position: relative;
+}
+
+.booking-svg, .kiosk-svg {
+  transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.kiosk-svg .emerging-photo-g {
+  transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+  transform: translateY(0);
+}
+
+/* Hover effects for option card graphics */
+.booking-option-theme .option-card:hover .booking-svg {
+  transform: translateY(-6px) scale(1.05) rotate(-3deg);
+}
+
+.booking-option-theme .option-card:hover .kiosk-svg {
+  transform: translateY(-4px) scale(1.05) rotate(3deg);
+}
+
+.booking-option-theme .option-card:hover .kiosk-svg .emerging-photo-g {
+  transform: translateY(6px);
+}
+
+/* Kembali Button */
+.booking-option-theme .btn-kembali {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  border: none !important;
+  border-radius: 9999px !important;
+  padding: 12px 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  cursor: pointer !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25) !important;
+  transition: all 0.25s ease !important;
+  margin-top: 18px !important;
+}
+
+.booking-option-theme .btn-kembali:hover {
+  transform: translateY(-2px) !important;
+  background: #1e293b !important;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.35) !important;
+}
+
+.booking-option-theme .btn-kembali:active {
+  transform: translateY(0) !important;
 }
 
 /* ================= WELCOME SCREEN (Y2K CYBER THEME) ================= */
@@ -2222,6 +2624,10 @@
   pointer-events: none;
 }
 
+.frame-selection-container.booking-option-theme::before {
+  display: none !important;
+}
+
 .frame-timer-capsule {
   background-color: #e2f952;
   color: #0f172a;
@@ -3237,6 +3643,36 @@
   object-fit: cover;
   border-radius: 26px;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.camera-instant-preview-loading {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 26px;
+  background: #0f172a; /* Dark background */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.preview-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left-color: #e2f952;
+  border-radius: 50%;
+  animation: spinner-rotate 1s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Review Decision Panel inside Instant Preview Card */
