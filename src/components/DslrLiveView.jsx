@@ -97,11 +97,32 @@ export default function DslrLiveView({ className, style, liveViewTimestamp, acti
     };
   }, [active, liveViewTimestamp]);
 
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      try {
+        window.__dslrStream = canvasRef.current.captureStream(25);
+      } catch (e) {
+        console.warn("captureStream error:", e);
+      }
+    }
+  }, []);
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', ...style }} className={className}>
       <img
         ref={imgRef}
         alt="DSLR Live View"
+        crossOrigin="anonymous"
+        onLoad={() => {
+          if (canvasRef.current && imgRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(imgRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
+          }
+        }}
         style={{
           width: '100%',
           height: '100%',
@@ -110,6 +131,13 @@ export default function DslrLiveView({ className, style, liveViewTimestamp, acti
           opacity: hasFrame ? 1 : 0,
           transition: 'opacity 0.2s ease'
         }}
+      />
+      {/* Hidden canvas for MediaStream recording */}
+      <canvas
+        ref={canvasRef}
+        width={1024}
+        height={680}
+        style={{ display: 'none' }}
       />
       {!hasFrame && (
         <div style={{

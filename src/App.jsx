@@ -334,23 +334,30 @@ function App() {
 
   // Start secret live photo video recording
   const startRecording = useCallback(() => {
-    const stream = cameraStream;
+    const stream = cameraStream || window.__dslrStream;
     if (!stream) {
       console.warn("No stream available to record live photo.");
       return;
     }
 
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      return;
+    }
+
     videoChunksRef.current = [];
     try {
-      let options = { mimeType: 'video/webm;codecs=vp9' };
+      let options = { mimeType: 'video/mp4;codecs=avc1' };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: 'video/mp4' };
+      }
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: 'video/webm;codecs=vp9' };
+      }
       if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options = { mimeType: 'video/webm;codecs=vp8' };
       }
       if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options = { mimeType: 'video/webm' };
-      }
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options = { mimeType: 'video/mp4' };
       }
       if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options = {};
@@ -365,7 +372,7 @@ function App() {
 
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start();
-      console.log("Started secret live photo recording...");
+      console.log("Started secret live photo recording...", options.mimeType);
     } catch (e) {
       console.error("Failed to start MediaRecorder for live photo:", e);
     }
@@ -658,11 +665,18 @@ function App() {
 
   // ============ CAMERA PAGE - Countdown & Auto Capture ============
   const capturePhotoRef = useRef(capturePhoto);
+  const startRecordingRef = useRef(startRecording);
   useEffect(() => {
     capturePhotoRef.current = capturePhoto;
-  }, [capturePhoto]);
+    startRecordingRef.current = startRecording;
+  }, [capturePhoto, startRecording]);
 
-  // ============ CAMERA PAGE - Countdown & Auto Capture ============
+  useEffect(() => {
+    if (currentPage === "camera" && isCountingDown && countdown <= 4) {
+      startRecordingRef.current();
+    }
+  }, [currentPage, isCountingDown, countdown]);
+
   // Menggunakan setInterval stabil agar hitungan mundur berjalan tepat 1 detik per angka
   // tanpa ter-reset atau terhambat oleh re-render di latar belakang.
   useEffect(() => {
@@ -676,6 +690,10 @@ function App() {
 
     const interval = setInterval(() => {
       setCountdown((prev) => {
+        if (prev <= 4 && prev > 1) {
+          startRecordingRef.current();
+        }
+
         if (prev <= 1) {
           clearInterval(interval);
           setIsCountingDown(false);

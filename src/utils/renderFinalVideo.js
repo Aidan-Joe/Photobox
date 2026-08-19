@@ -191,20 +191,23 @@ export async function renderFinalVideo({
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
-      // 4. Set up MediaRecorder to capture canvas stream
+      // 4. Set up MediaRecorder to capture canvas stream (Prioritize MP4)
       const stream = canvas.captureStream(30); // 30 fps
       let recorder;
       let recordedChunks = [];
 
-      let options = { mimeType: "video/webm;codecs=vp9" };
+      let options = { mimeType: "video/mp4;codecs=avc1" };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: "video/mp4" };
+      }
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: "video/webm;codecs=vp9" };
+      }
       if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options = { mimeType: "video/webm;codecs=vp8" };
       }
       if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options = { mimeType: "video/webm" };
-      }
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options = { mimeType: "video/mp4" };
       }
       if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options = {};
@@ -230,54 +233,85 @@ export async function renderFinalVideo({
         // Sequential transitions - raw videos concatenated without frame
         for (let i = 0; i < holes.length; i++) {
           const livePhotoBlob = livePhotos[i];
-          if (!livePhotoBlob) continue;
+          const staticPhoto = loadedPhotos[i];
 
-          const video = document.createElement("video");
-          video.src = URL.createObjectURL(livePhotoBlob);
-          video.muted = true;
-          video.playsInline = true;
+          if (livePhotoBlob) {
+            const video = document.createElement("video");
+            video.src = URL.createObjectURL(livePhotoBlob);
+            video.muted = true;
+            video.playsInline = true;
 
-          await new Promise((res) => {
-            video.onloadedmetadata = res;
-          });
+            await new Promise((res) => {
+              video.onloadedmetadata = res;
+              video.onerror = res;
+            });
 
-          video.play();
-          
-          // Force duration to 3 seconds (the actual recorded length)
-          // because browser metadata duration is inaccurate/Infinity for recorded blobs.
-          const duration = 3;
-          const playbackRate = 1.0;
-          video.playbackRate = playbackRate;
+            video.play().catch(() => {});
+            
+            const duration = 3;
+            const playbackRate = 1.0;
+            video.playbackRate = playbackRate;
 
-          const expectedPlayDuration = (duration / playbackRate) * 1000;
-          const startTime = Date.now();
+            const expectedPlayDuration = (duration / playbackRate) * 1000;
+            const startTime = Date.now();
 
-          await new Promise((res) => {
-            const drawLoop = () => {
-              const elapsed = Date.now() - startTime;
-              if (elapsed >= expectedPlayDuration) {
-                res();
-                return;
-              }
-              // Draw video frame on canvas
-              ctx.fillStyle = "#000000";
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            await new Promise((res) => {
+              const drawLoop = () => {
+                const elapsed = Date.now() - startTime;
+                if (elapsed >= expectedPlayDuration) {
+                  res();
+                  return;
+                }
+                ctx.fillStyle = "#000000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-              if (onProgress) {
-                const stepElapsed = Math.min(elapsed / expectedPlayDuration, 1);
-                // Total progress across all N videos in transition
-                const overallRatio = (i + stepElapsed) / holes.length;
-                onProgress(Math.round(overallRatio * 100));
-              }
+                if (onProgress) {
+                  const stepElapsed = Math.min(elapsed / expectedPlayDuration, 1);
+                  const overallRatio = (i + stepElapsed) / holes.length;
+                  onProgress(Math.round(overallRatio * 100));
+                }
 
-              requestAnimationFrame(drawLoop);
-            };
-            drawLoop();
-            setTimeout(res, expectedPlayDuration + 200);
-          });
+                requestAnimationFrame(drawLoop);
+              };
+              drawLoop();
+              setTimeout(res, expectedPlayDuration + 200);
+            });
 
-          URL.revokeObjectURL(video.src);
+            URL.revokeObjectURL(video.src);
+          } else if (staticPhoto) {
+            // Fallback animasi slide untuk foto statis
+            const durationMs = 2000;
+            const startTime = Date.now();
+            await new Promise((res) => {
+              const drawLoop = () => {
+                const elapsed = Date.now() - startTime;
+                if (elapsed >= durationMs) {
+                  res();
+                  return;
+                }
+                const progress = elapsed / durationMs;
+                const scale = 1.0 + progress * 0.08; // Subtle zoom
+                ctx.fillStyle = "#000000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const w = canvas.width * scale;
+                const h = canvas.height * scale;
+                const x = (canvas.width - w) / 2;
+                const y = (canvas.height - h) / 2;
+
+                ctx.drawImage(staticPhoto, x, y, w, h);
+
+                if (onProgress) {
+                  const overallRatio = (i + progress) / holes.length;
+                  onProgress(Math.round(overallRatio * 100));
+                }
+                requestAnimationFrame(drawLoop);
+              };
+              drawLoop();
+              setTimeout(res, durationMs + 100);
+            });
+          }
         }
 
       } else {

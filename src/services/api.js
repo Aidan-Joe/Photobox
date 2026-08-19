@@ -129,12 +129,26 @@ export const sessionAPI = {
 
     // compiled final video (transition)
     if (finalVideoTransition) {
-      formData.append("final_video_transition", finalVideoTransition);
+      const ext = finalVideoTransition.type && finalVideoTransition.type.includes("mp4") ? "mp4" : "webm";
+      const file =
+        finalVideoTransition instanceof File
+          ? finalVideoTransition
+          : new File([finalVideoTransition], `final_video_transition.${ext}`, {
+              type: finalVideoTransition.type || `video/${ext}`,
+            });
+      formData.append("final_video_transition", file);
     }
 
     // compiled final video (loop)
     if (finalVideoLoop) {
-      formData.append("final_video_loop", finalVideoLoop);
+      const ext = finalVideoLoop.type && finalVideoLoop.type.includes("mp4") ? "mp4" : "webm";
+      const file =
+        finalVideoLoop instanceof File
+          ? finalVideoLoop
+          : new File([finalVideoLoop], `final_video_loop.${ext}`, {
+              type: finalVideoLoop.type || `video/${ext}`,
+            });
+      formData.append("final_video_loop", file);
     }
 
     // 10 hasil capture
