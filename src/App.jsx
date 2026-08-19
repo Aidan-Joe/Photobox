@@ -65,7 +65,6 @@ function App() {
   const paymentPollRef = useRef(null);
   const isCapturingRef = useRef(false);
   const activeCaptureControllerRef = useRef(null);
-  const dslrCapturePromiseRef = useRef(null);
 
   // Get data
   const { data: printOptions } = useFetch(
@@ -103,7 +102,7 @@ function App() {
   const [captureDelay, setCaptureDelay] = useState(10); // default 10s capture delay
   const [cameraDevices, setCameraDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState(() => {
-    return localStorage.getItem('kiosk_camera_device_id') || '';
+    return localStorage.getItem('kiosk_camera_device_id') || 'dslr_liveview';
   });
   const [liveViewTimestamp, setLiveViewTimestamp] = useState(() => Date.now());
   
@@ -176,8 +175,7 @@ function App() {
   const triggerStartLiveView = useCallback(async () => {
     try {
       await fetch(`${CONFIG.API_URL}/session/liveview/start`, { method: 'POST' });
-      // Wait 1 second for digiCamControl to fully initialize port 5514 stream
-      await new Promise(r => setTimeout(r, 1000));
+      // Tidak perlu delay lagi karena backend tidak melakukan Hide->Show toggle
       setLiveViewTimestamp(Date.now());
     } catch (err) {
       console.warn('Failed to start live view:', err);
@@ -373,45 +371,10 @@ function App() {
     }
   }, [cameraStream]);
 
-  const preTriggerDslrCapture = useCallback(() => {
-    if (selectedDeviceId !== 'dslr_liveview' || dslrCapturePromiseRef.current) return;
-
-    console.log("[DSLR Pre-trigger] Triggering capture 1 second early to compensate for latency...");
-    setIsCapturingDslr(true);
-    const captureController = new AbortController();
-    activeCaptureControllerRef.current = captureController;
-
-    // Dinaikkan dari 20s -> 30s: worst-case backend sekarang bisa sampai
-    // ~21s (15s poll capture + 3s download + 3s rearm live view), jadi 20s
-    // terlalu mepet dan bisa bikin request di-abort padahal kamera masih
-    // proses normal (bukan benar-benar macet).
-    const timeoutId = setTimeout(() => captureController.abort(), 30000);
-
-    const promise = (async () => {
-      try {
-        const response = await fetch(`${CONFIG.API_URL}/session/${workflow.sessionId}/capture-dslr`, {
-          method: "POST",
-          signal: captureController.signal
-        });
-        clearTimeout(timeoutId);
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || errData.messages?.error || errData.message || `Gagal memicu DSLR (${response.status})`);
-        }
-        return await response.json();
-      } catch (err) {
-        clearTimeout(timeoutId);
-        throw err;
-      } finally {
-        activeCaptureControllerRef.current = null;
-      }
-    })();
-
-    dslrCapturePromiseRef.current = {
-      promise,
-      controller: captureController
-    };
-  }, [selectedDeviceId, workflow.sessionId]);
+  // preTriggerDslrCapture DIHAPUS: Fungsi ini sebelumnya memicu shutter
+  // kamera 1 detik sebelum countdown habis (di countdown=1), lalu capturePhoto()
+  // memicu lagi di countdown=0, mengakibatkan kamera "jepret 2 kali".
+  // Sekarang hanya capturePhoto() yang memicu shutter, tepat 1 kali saja.
 
   const capturePhoto = useCallback(async () => {
     if (photoIndex >= 10 || isTimerPaused || isCapturingRef.current) return;
@@ -454,34 +417,25 @@ function App() {
 
         try {
           let result;
-          if (dslrCapturePromiseRef.current) {
-            console.log("[DSLR Capture] Awaiting pre-triggered DSLR capture...");
-            result = await dslrCapturePromiseRef.current.promise;
-            dslrCapturePromiseRef.current = null;
-          } else {
-            console.log("[DSLR Capture] No pre-trigger found, triggering DSLR capture now...");
-            // Dinaikkan dari 20s -> 30s: worst-case backend sekarang bisa
-            // sampai ~21s (15s poll capture + 3s download + 3s rearm live
-            // view), jadi 20s terlalu mepet dan bisa bikin request di-abort
-            // padahal kamera masih proses normal (bukan benar-benar macet).
-            const timeoutId = setTimeout(() => captureController.abort(), 30000);
+          // SINGLE TRIGGER: Langsung kirim 1 perintah capture ke backend.
+          // Tidak ada lagi pre-trigger yang menyebabkan "jepret 2 kali".
+          console.log("[DSLR Capture] Triggering single DSLR capture...");
+          const timeoutId = setTimeout(() => captureController.abort(), 30000);
 
-            // 2. Pemicu Shutter DSLR Fisik melalui API Backend
-            const response = await fetch(`${CONFIG.API_URL}/session/${workflow.sessionId}/capture-dslr`, {
-              method: "POST",
-              signal: captureController.signal
-            });
-            
-            clearTimeout(timeoutId);
-            activeCaptureControllerRef.current = null;
-            
-            if (!response.ok) {
-              const errData = await response.json().catch(() => ({}));
-              throw new Error(errData.error || errData.messages?.error || errData.message || `Gagal memicu DSLR (${response.status})`);
-            }
-
-            result = await response.json();
+          const response = await fetch(`${CONFIG.API_URL}/session/${workflow.sessionId}/capture-dslr`, {
+            method: "POST",
+            signal: captureController.signal
+          });
+          
+          clearTimeout(timeoutId);
+          activeCaptureControllerRef.current = null;
+          
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || errData.messages?.error || errData.message || `Gagal memicu DSLR (${response.status})`);
           }
+
+          result = await response.json();
 
           if (!result.status || !result.data?.image_url) {
             throw new Error(result.message || "Gagal menjepret gambar.");
@@ -548,7 +502,6 @@ function App() {
           })();
 
         } catch (dslrErr) {
-          dslrCapturePromiseRef.current = null;
           activeCaptureControllerRef.current = null;
           console.warn("DSLR capture failed or timed out:", dslrErr);
           
@@ -606,16 +559,7 @@ function App() {
       setLiveViewTimestamp(Date.now());
     }
 
-    // Batalkan pre-trigger jika ada
-    if (dslrCapturePromiseRef.current) {
-      try {
-        dslrCapturePromiseRef.current.controller.abort();
-        console.log("[DSLR Capture] Menghentikan pre-trigger karena user mengambil ulang (retake) foto.");
-      } catch (e) {
-        console.error("Gagal menghentikan pre-trigger:", e);
-      }
-      dslrCapturePromiseRef.current = null;
-    }
+    // (pre-trigger sudah dihapus, tidak perlu dibatalkan lagi)
 
     // Batalkan request capture jika masih berjalan
     if (activeCaptureControllerRef.current) {
@@ -653,8 +597,8 @@ function App() {
       getCameraList().then((devices) => {
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
         setCameraDevices(videoDevices);
-        if (videoDevices.length > 0 && !selectedDeviceId) {
-          setSelectedDeviceId(videoDevices[0].deviceId);
+        if (!selectedDeviceId) {
+          setSelectedDeviceId('dslr_liveview');
         }
       });
     }
@@ -713,6 +657,14 @@ function App() {
   }, [currentPage, activePreviewPhoto, reviewCountdown, handleKeepPhoto]);
 
   // ============ CAMERA PAGE - Countdown & Auto Capture ============
+  const capturePhotoRef = useRef(capturePhoto);
+  useEffect(() => {
+    capturePhotoRef.current = capturePhoto;
+  }, [capturePhoto]);
+
+  // ============ CAMERA PAGE - Countdown & Auto Capture ============
+  // Menggunakan setInterval stabil agar hitungan mundur berjalan tepat 1 detik per angka
+  // tanpa ter-reset atau terhambat oleh re-render di latar belakang.
   useEffect(() => {
     if (
       currentPage !== "camera" ||
@@ -722,36 +674,20 @@ function App() {
     )
       return;
 
-    if (countdown === Math.min(captureDelay, 10)) {
-      startRecording();
-    }
-
-    if (countdown === 1 && selectedDeviceId === 'dslr_liveview') {
-      preTriggerDslrCapture();
-    }
-
-    if (countdown === 0) {
-      setIsCountingDown(false);
-      capturePhoto();
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setCountdown((prev) => prev - 1);
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setIsCountingDown(false);
+          capturePhotoRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
-    return () => clearTimeout(timer);
-  }, [
-    currentPage,
-    countdown,
-    photoIndex,
-    isTimerPaused,
-    isCountingDown,
-    capturePhoto,
-    startRecording,
-    selectedDeviceId,
-    preTriggerDslrCapture,
-  ]);
+    return () => clearInterval(interval);
+  }, [currentPage, photoIndex, isTimerPaused, isCountingDown]);
 
   // ============ PREVIEW PAGE - 7 Menit Timer ============
   useEffect(() => {
