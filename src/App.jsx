@@ -235,6 +235,10 @@ function App() {
     isCapturingRef.current = false;
     setIsCapturingDslr(false);
 
+    if (selectedDeviceId === 'dslr_liveview') {
+      setLiveViewTimestamp(Date.now());
+    }
+
     // Mulai unduhan latar belakang untuk foto yang baru saja disimpan (kept)
     const lastPhotoIdx = capturedPhotos.length - 1;
     const lastPhoto = capturedPhotos[lastPhotoIdx];
@@ -597,6 +601,10 @@ function App() {
     setIsTimerPaused(false);
     isCapturingRef.current = false;
     setIsCapturingDslr(false);
+
+    if (selectedDeviceId === 'dslr_liveview') {
+      setLiveViewTimestamp(Date.now());
+    }
 
     // Batalkan pre-trigger jika ada
     if (dslrCapturePromiseRef.current) {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { CONFIG } from '../config';
 
 // Live view DSLR via MJPEG stream digiCamControl (port 5514).
 // PENTING: <img src="...5514/live"> yang pasif TIDAK reliable untuk
@@ -17,7 +18,7 @@ import { useState, useEffect, useRef } from 'react';
 // yang jarang terjadi di kasus ini. Komponen ini membaca stream secara
 // manual byte-per-byte supaya bisa mendeteksi kapan terakhir kali frame
 // baru diterima, dan reconnect paksa kalau sudah melewati batas wajar.
-export default function DslrLiveView({ className, style }) {
+export default function DslrLiveView({ className, style, liveViewTimestamp, active = true }) {
   const imgRef = useRef(null);
   const abortControllerRef = useRef(null);
   const objectUrlRef = useRef(null);
@@ -25,10 +26,19 @@ export default function DslrLiveView({ className, style }) {
   const [connectionKey, setConnectionKey] = useState(0);
   const [hasFrame, setHasFrame] = useState(false);
 
+
+  const cleanupObjectUrl = () => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  };
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      cleanupObjectUrl();
     };
   }, []);
 
@@ -36,14 +46,10 @@ export default function DslrLiveView({ className, style }) {
     let stallTimeout;
     let cancelled = false;
 
-    const cleanupObjectUrl = () => {
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-    };
-
     const connect = async () => {
+      if (!active) {
+        return;
+      }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -60,8 +66,24 @@ export default function DslrLiveView({ className, style }) {
         }
       }, 2000);
 
+      let reader = null;
       try {
-        const response = await fetch(`http://127.0.0.1:5514/live?t=${Date.now()}`, {
+        let liveviewPort = 5514;
+        try {
+          const settingsRes = await fetch(`${CONFIG.API_URL}/session/settings`, {
+            signal: controller.signal,
+          });
+          if (settingsRes.ok) {
+            const settingsData = await settingsRes.json();
+            if (settingsData.data?.liveview_port) {
+              liveviewPort = settingsData.data.liveview_port;
+            }
+          }
+        } catch (e) {
+          // Fallback ke port default 5514
+        }
+
+        const response = await fetch(`http://127.0.0.1:${liveviewPort}/live?t=${Date.now()}`, {
           signal: controller.signal,
         });
 
@@ -69,7 +91,7 @@ export default function DslrLiveView({ className, style }) {
           throw new Error(`Live view stream response tidak ok: ${response.status}`);
         }
 
-        const reader = response.body.getReader();
+        reader = response.body.getReader();
         const eoiMarker = [0xff, 0xd9]; // JPEG EOI (End Of Image) marker
         let buffer = new Uint8Array(0);
 
@@ -136,6 +158,11 @@ export default function DslrLiveView({ className, style }) {
         }
       } finally {
         clearTimeout(stallTimeout);
+        if (reader) {
+          try {
+            reader.cancel().catch(() => {});
+          } catch (e) {}
+        }
         if (!cancelled) {
           // Reconnect segera (200ms jeda kecil supaya tidak spam request
           // kalau digiCamControl sendiri sedang benar-benar mati).
@@ -156,9 +183,8 @@ export default function DslrLiveView({ className, style }) {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      cleanupObjectUrl();
     };
-  }, [connectionKey]);
+  }, [connectionKey, liveViewTimestamp, active]);
 
   return (
     <img

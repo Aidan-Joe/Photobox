@@ -167,7 +167,7 @@ export default function Camera({
                   </div>
                 );
               })}
-              
+
               {/* Exactly one active placeholder for the next shot */}
               {photoIndex < 10 && (
                 <div className="camera-recent-shot-placeholder">
@@ -186,8 +186,8 @@ export default function Camera({
               <div className="camera-timer-outer-container">
                 <div className="camera-timer-pill" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="timer-icon">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
                   </svg>
                   <select
                     value={captureDelay}
@@ -235,7 +235,7 @@ export default function Camera({
               )}
               {/* The selected frame border overlay */}
               <div className={`camera-frame-overlay ${getOverlayClass(selectedFrame)}`} />
-              
+
               {/* Huge countdown overlay */}
               {countdown > 0 && (
                 <div className="camera-countdown-overlay-simple">
@@ -256,8 +256,8 @@ export default function Camera({
                 title="Ambil Foto"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shutter-icon-svg">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
                 </svg>
               </button>
             </div>
@@ -304,7 +304,7 @@ export default function Camera({
             ) : (
               <img src={activePreviewUrl} alt="Instant Preview" className="camera-instant-preview-image" />
             )}
-            
+
             {/* Review Decision Panel */}
             <div className="preview-decision-panel">
               <div className="preview-timer-text">
@@ -328,7 +328,7 @@ export default function Camera({
                   }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
                   </svg>
                   {canRetake ? "Ambil Ulang" : "Jatah Retake Habis"}
                 </button>

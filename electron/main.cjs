@@ -4,6 +4,7 @@ const path = require("path");
 function createWindow() {
   const win = new BrowserWindow({
     fullscreen: true,
+    alwaysOnTop: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -12,6 +13,8 @@ function createWindow() {
     }
   });
 
+  win.removeMenu(); // Hapus header menu bawaan Electron (File, Edit, View, dll)
+  // win.setAlwaysOnTop(true, "screen-saver");
   win.loadURL("http://localhost:5173");
   win.webContents.openDevTools();
 }
