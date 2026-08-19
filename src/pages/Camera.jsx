@@ -214,16 +214,12 @@ export default function Camera({
 
             <div className="camera-video-wrapper">
               {selectedDeviceId === 'dslr_liveview' ? (
-                !activePreviewPhoto && !isCapturing ? (
-                  <DslrLiveView
-                    className="camera-video-element"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <div className="camera-video-element" style={{ width: '100%', height: '100%', backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="preview-spinner" />
-                  </div>
-                )
+                <DslrLiveView
+                  className="camera-video-element"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  liveViewTimestamp={liveViewTimestamp}
+                  active={!activePreviewPhoto && !isCapturing}
+                />
               ) : (
                 <video
                   ref={videoRef}

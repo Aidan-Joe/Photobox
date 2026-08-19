@@ -54,25 +54,8 @@ export default function AdminSettings({ onSave, onCancel }) {
     if (selectedDevice === 'dslr_liveview') {
       setStream(null);
       setError(null);
-      setLiveViewStarting(true);
-      
-      // Auto-trigger live view start in digiCamControl via backend
-      fetch(`${CONFIG.API_URL}/session/liveview/start`, { method: 'POST' })
-        .then(async () => {
-          // Wait 1 second for digiCamControl to fully initialize port 5514 stream
-          await new Promise(r => setTimeout(r, 1000));
-          setLiveViewStarting(false);
-        })
-        .catch(err => {
-          console.warn('Failed to auto-start live view:', err);
-          setLiveViewStarting(false);
-        });
-        
-      return () => {
-        // Auto-stop live view when component unmounts or selected device changes
-        fetch(`${CONFIG.API_URL}/session/liveview/stop`, { method: 'POST' })
-          .catch(err => console.warn('Failed to auto-stop live view:', err));
-      };
+      setLiveViewStarting(false);
+      return;
     }
 
     let activeStream = null;
